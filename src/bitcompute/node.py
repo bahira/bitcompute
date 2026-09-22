@@ -11,7 +11,7 @@ from bitcompute.capability import Capability
 from bitcompute.executor import get as get_executor
 from bitcompute.incentive import Ledger, should_unchoke
 from bitcompute.manifest import JobManifest, WorkUnit
-from bitcompute.verify import majority_vote
+from bitcompute.verify import majority_vote, median_vote
 
 
 def _fmt_for(executor: str) -> str | None:
@@ -125,15 +125,18 @@ def seed_job(job_dir: str, port: int = 6881,
     results.sort(key=lambda r: (ranked.index(str(r["worker_port"]))
                                 if str(r["worker_port"]) in ranked else 99,
                                 r["worker_port"]))
+    tokens = {str(r["worker_port"]): {
+        "bytes": os.path.getsize(os.path.join(job_dir, f"result_{r['worker_port']}.json")),
+        "pieces": len(r["units"]),
+    } for r in results}
     torrent_ok = _verify_result_torrents(job_dir, magnet, results, port, None)
     if man.mode == "train":
-        vecs = [struct.unpack("<2d", bytes.fromhex(h)) for r in results
-                for h in r["units"].values()]
-        if not vecs:
+        packed = [bytes.fromhex(h) for r in results for h in r["units"].values()]
+        if not packed:
             raise RuntimeError("no results to aggregate")
-        w = sum(v[0] for v in vecs) / len(vecs)
-        b = sum(v[1] for v in vecs) / len(vecs)
-        final = struct.pack("<2d", w, b)
+        fmt = _fmt_for(man.executor) or "2d"
+        final = median_vote(packed, fmt)
+        w, b = struct.unpack("<" + fmt, final)
         with open(os.path.join(job_dir, "result.bin"), "wb") as f:
             f.write(final)
         summary = {"job_id": man.job_id, "mode": "train", "w": w, "b": b,
@@ -150,6 +153,7 @@ def seed_job(job_dir: str, port: int = 6881,
         summary = {"job_id": man.job_id, "mode": "infer", "units": merged_infer,
                    "workers": len(results)}
     summary["torrent_verified"] = torrent_ok
+    summary["tokens"] = tokens
     summary["magnet"] = magnet
     sess.pause()
     with open(os.path.join(job_dir, "summary.json"), "w", encoding="utf-8") as f:
