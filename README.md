@@ -66,10 +66,10 @@ Reference implementations: `executors/train_numpy.py` (toy linear regression),
 
 ## Skipped (by design)
 
-- tokens (no per-piece token accounting)
-- DHT bootstrap nodes configured in-process (127.0.0.1); multi-machine routers = next step
-- sandbox (executors run in-process, no isolation)
-- pex (no peer-exchange protocol)
+- tokens: per-peer bytes+pieces in summary.tokens
+- DHT bootstrap in-process + env BITCOMPUTE_DHT_ROUTERS for multi-machine
+- sandbox: executors in-process, no isolation
+- pex: libtorrent default on
 
 ## Network state (live data in [`network.json`](network.json))
 

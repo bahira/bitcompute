@@ -16,9 +16,17 @@ def _settings(port: int, bootstrap: str = "") -> dict:
         "enable_lsd": False,
         "enable_upnp": False,
         "enable_natpmp": False,
+        "enable_incoming_tcp": True,
+        "enable_incoming_utp": True,
+        "enable_outgoing_utp": True,
+        "enable_outgoing_tcp": True,
     }
     if bootstrap:
         s["dht_bootstrap_nodes"] = bootstrap
+    else:
+        routers = [r for r in os.environ.get("BITCOMPUTE_DHT_ROUTERS", "").split(";") if r]
+        if routers:
+            s["dht_bootstrap_nodes"] = ";".join(routers)
     return s
 
 
