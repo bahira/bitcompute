@@ -3,7 +3,9 @@ __pycache__/
 .pytest_cache/
 dist/
 build/
-*.gguf
-result.bin
-.venv/
 models/*.gguf
+job/result*.json
+job/summary.json
+job/result.bin
+tmp_x
+
