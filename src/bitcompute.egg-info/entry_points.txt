@@ -1,2 +1,0 @@
-[console_scripts]
-bitcompute = bitcompute.cli:main

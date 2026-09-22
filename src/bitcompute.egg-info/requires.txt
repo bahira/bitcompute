@@ -1,7 +1,0 @@
-libtorrent>=2.0
-
-[dev]
-pytest>=8
-
-[llm]
-llama-cpp-python
