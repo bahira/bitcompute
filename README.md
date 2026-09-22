@@ -1,99 +1,96 @@
 # bitcompute
 
-BitTorrent-style swarm for distributed training & inference compute: one seed
-publishes a job manifest over libtorrent, worker peers fetch it, run their
-executor units, and the seed aggregates results (median/majority vote).
+BitTorrent-style P2P compute network for distributed ML: a `libtorrent`-backed
+swarm distributes content-addressed job manifests; participating nodes
+(CPU/GPU) download pieces, run compute units, and publish results back over
+the same swarm.
 
-## Quickstart
+[![CI](https://github.com/bahira/bitcompute/actions/workflows/badge.svg)](https://github.com/bahira/bitcompute/actions)
+[![Pages](https://img.shields.io/badge/GitHub%20Pages-live-brightgreen)](https://bahira.github.io/bitcompute/)
 
-Install once:
+## Why
 
-```
-python -m pip install -e ".[dev]"
-```
+| Need | Answer in this stack |
+| --- | --- |
+| Content-addressed, piece-verified transport | libtorrent 2.1 (`info_hash_t`, `file_storage`, sha256 pieces) |
+| Redundant compute with Byzantine tolerance | per-unit k-redundancy + coordinate-wise `median_vote` |
+| Incentives | tit-for-tat ledger (bytes + pieces per peer) |
+| Crash resilience | per-port `resume_<port>.dat` files, replayed on restart |
+| Determinism | sha256 over canonicalized JSON manifest → stable `job_id` |
 
-Three terminals (example job in `job/`):
-
-```
-python -m bitcompute.cli seed job --port 6881 --workers 6882 6883
-```
-
-```
-python -m bitcompute.cli worker --magnet 6b248be686ae3b84c00e24501fa08841c442ecaa --job-dir job --port 6882 --seed-port 6881
-```
+## Stack
 
 ```
-python -m bitcompute.cli worker --magnet 6b248be686ae3b84c00e24501fa08841c442ecaa --job-dir job --port 6883 --seed-port 6881
+src/bitcompute/
+├─ manifest.py     # JobManifest, WorkUnit, deterministic job_id, torrent payload
+├─ torrent.py      # libtorrent wrappers: seed_bytes, fetch (DHT bootstrap, resume), wait
+├─ node.py         # seed_job / run_worker / status: orchestration, aggregation, verification
+├─ cli.py          # `seed`, `worker`, `status` subcommands
+├─ executor.py     # Protocol + registry
+├─ verify.py       # deterministic hash gate, median_vote, majority_vote
+├─ incentive.py    # Ledger (bytes+pieces), should_unchoke (tit-for-tat)
+├─ capability.py   # Capability wanted/have
+└─ executors/
+   ├─ train_numpy.py   # toy SGD trainer (fmt 2d packed vectors)
+   └─ infer_llama.py   # Qwen2.5-0.5B via llama-cpp-python (n_ctx/model params)
 ```
 
-Then inspect the outcome:
+## Live network state
+
+See [`network.json`](network.json) — magnets, ports, per-peer token credits
+(bytes/pieces), results, and torrent verification (`torrent_verified: true`
+for every published result in the last run).
+
+| Job | Mode | Result | Workers | Torrents verified |
+| --- | --- | --- | --- | --- |
+| toy-train | train | w=2.0029, b=1.0 | 2 | True/True |
+| slm-infer | infer | "1+1=2, 2+2=4" | 1 | True |
+
+## Quick start
 
 ```
+# 1. seed the job (manifest over the swarm)
+python -m bitcompute.cli seed job --port 7401 --workers 7402 7403
+
+# 2. N compute peers (any machine, DHT bootstrap via env for multi-machine)
+python -m bitcompute.cli worker --magnet <40-hex-magnet> --job-dir job --port 7402 --seed-port 7401
+python -m bitcompute.cli worker --magnet <40-hex-magnet> --job-dir job --port 7403 --seed-port 7401
+
+# 3. status (reads summary.json + result.json)
 python -m bitcompute.cli status job
 ```
 
-Tests:
+Multi-machine DHT: `set BITCOMPUTE_DHT_ROUTERS=ip:port;ip:port`.
+
+## How it works
+
+1. Seed publishes canonicalized manifest as a torrent (pieces = 16 KiB,
+   sha256-verified).
+2. Each worker fetches the manifest (DHT bootstrap + direct peer injection),
+   computes its assigned units locally, writes `result_<port>.json` and
+   seeds it as its own torrent (20 s grace).
+3. Seed waits for all N result files, verifies each result torrent over the
+   swarm (bytes == json + checksum), ranks peers by ledger contribution,
+   aggregates: `median_vote` (train, per-coordinate) / `majority_vote`
+   (infer), writes `result.bin` + `summary.json` (with `tokens` per peer).
+
+Byzantine results (e.g. 99/99 vs median 2/1) are tolerated by the median at
+k≥3; the deterministic gate rejects non-deterministic repeats.
+
+## Tests & benchmarks
 
 ```
-python -m pytest
+python -m pytest -q        # 41 passed, localhost-only, no external services
+python tools/bench.py      # fetch latencies: ~0.64-0.75 s for 16KB-2MB
 ```
 
-## Architecture
+## Roadmap (open issues)
 
-| Layer | Role |
-| --- | --- |
-| torrent | job manifest (`manifest.json`, single file, 16 KiB pieces) |
-| piece | chunk of the manifest payload; one piece maps to one work-unit result |
-| seed | holds the magnet, serves the manifest, collects `result_<port>.json`, aggregates into `result.bin`/`summary.json` |
-| 2 workers | compute peers (default ports 6882/6883), each fetches the manifest, runs its units via the registered executor |
-| tit-for-tat | `incentive.Ledger` + `should_unchoke()` rank contributors (net bytes) and order the aggregation |
-| verification | every result is also re-fetched as its own torrent (`torrent_verified` in `summary.json`) |
+- #19 PEX/IPv6 validation on public DHT routers (2 machines)
+- #20 mini-staking: per-byte credit as exchange token
+- #21 PyPI packaging + semver tags
+- #22 static HTML dashboard generated from network.json
 
-## Discovery modes
+## License
 
-- localhost: direct peer injection (`--seed-port`) + DHT bootstrap (`dht_bootstrap_nodes`)
-- resume: each worker writes `resume_<port>.dat` via libtorrent; a restarted peer continues from it
-
-## Adding an executor
-
-1. Create `src/bitcompute/executors/<name>.py`.
-2. Define a class with a `name` attribute and `run(self, *, unit_uid, shard, params) -> bytes`.
-3. Call `register(cls)` from `bitcompute.executor` at module end — `get(name)` lazily imports
-   `bitcompute.executors.<name>` and instantiates it.
-
-Reference implementations: `executors/train_numpy.py` (toy linear regression),
-`executors/infer_llama.py` (GGUF generation), and the built-in `mock`.
-
-## Skipped (by design)
-
-- tokens: per-peer bytes+pieces in summary.tokens
-- DHT bootstrap in-process + env BITCOMPUTE_DHT_ROUTERS for multi-machine
-- sandbox: executors in-process, no isolation
-- pex: libtorrent default on
-
-## Network state (live data in [`network.json`](network.json))
-
-| Job | Mode | Magnet (info-hash) | Seed port | Workers | Result |
-| --- | --- | --- | --- | --- | --- |
-| toy-train | train | `6b248be686ae3b84c00e24501fa08841c442ecaa` | 7401 | 2 | w=2.0014, b=0.9711 |
-| slm-infer | infer (Qwen2.5-0.5B) | `096509555d5346e4b37573454724aad6b6f62587` | 7411 | 1 | "1+1=2, 2+2=4" |
-
-Torrent verification of every result: all `True` in `network.json`.
-
-## Participer (auto-compute)
-
-Terminal 1 (seed, publie le manifest):
-
-```
-python -m bitcompute.cli seed job --port 7401 --workers 7402 7403
-```
-
-Terminal 2+3 (workers = participants qui prêtent leur GPU/CPU):
-
-```
-python -m bitcompute.cli worker --magnet 6b248be686ae3b84c00e24501fa08841c442ecaa --job-dir job --port 7402 --seed-port 7401
-python -m bitcompute.cli worker --magnet 6b248be686ae3b84c00e24501fa08841c442ecaa --job-dir job --port 7403 --seed-port 7401
-```
-
-Le seed imprime le JSON d'etat (magnet + `torrent_verified` + median) et écrit
-`summary.json` / `result.bin`; `status job` les relit.
+MIT

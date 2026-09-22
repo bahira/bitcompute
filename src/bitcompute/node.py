@@ -36,7 +36,8 @@ def load_manifest(job_dir: str) -> JobManifest:
 
 def run_worker(magnet: str, job_dir: str, port: int, seed_port: int) -> dict:
     """Join the swarm, compute this node's units, publish results. Returns payload dict."""
-    dest = job_dir
+    dest = os.path.join(job_dir, f"w{port}")
+    os.makedirs(dest, exist_ok=True)
     bootstrap = f"127.0.0.1:{seed_port}"
     resume = os.path.join(job_dir, f"resume_{port}.dat")
     handle, sess = bt.fetch(magnet, dest, port, seed_port=seed_port,

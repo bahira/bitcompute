@@ -1,5 +1,5 @@
 {
- "generated": 1790103167,
+ "generated": 1790111770,
  "jobs": [
   {
    "name": "toy-train",
@@ -8,12 +8,22 @@
    "seed_port": 7401,
    "workers": 2,
    "result": {
-    "w": 2.0014,
-    "b": 0.9711
+    "w": 2.0029,
+    "b": 1.0
    },
    "torrent_verified": {
     "7402": true,
     "7403": true
+   },
+   "tokens": {
+    "7402": {
+     "bytes": 149,
+     "pieces": 2
+    },
+    "7403": {
+     "bytes": 149,
+     "pieces": 2
+    }
    }
   },
   {
@@ -27,6 +37,12 @@
    },
    "torrent_verified": {
     "7412": true
+   },
+   "tokens": {
+    "7412": {
+     "bytes": 85,
+     "pieces": 1
+    }
    }
   }
  ]

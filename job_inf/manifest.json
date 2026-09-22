@@ -1,1 +1,0 @@
-{"job_id": "e3b4cfe0197fb9a1ed5eaa97925238a9c6f1a6dc28962843b50a3c799e7e3032", "name": "slm-infer", "mode": "infer", "units": [{"uid": "i0", "round": 0, "shard": null, "input_ref": "q1"}], "executor": "infer_llama", "params": {"max_tokens": 8, "temperature": 0.0}, "redundancy": 1, "shard_names": ["q1"], "shards": ["312b313d"]}
