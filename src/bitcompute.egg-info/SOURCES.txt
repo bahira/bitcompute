@@ -1,0 +1,9 @@
+pyproject.toml
+src/bitcompute/__init__.py
+src/bitcompute.egg-info/PKG-INFO
+src/bitcompute.egg-info/SOURCES.txt
+src/bitcompute.egg-info/dependency_links.txt
+src/bitcompute.egg-info/entry_points.txt
+src/bitcompute.egg-info/requires.txt
+src/bitcompute.egg-info/top_level.txt
+src/bitcompute/executors/__init__.py
