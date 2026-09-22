@@ -51,9 +51,13 @@ def seed_bytes(payload: bytes, name: str, port: int):
 
 
 def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
-          seed_host: str = "127.0.0.1", seed_port: int = 6881):
+          seed_host: str = "127.0.0.1", seed_port: int = 6881,
+          name: str = "manifest.json"):
     """Join a swarm via direct peer injection. Returns (handle, session)."""
     sess = _session(port)
+    for path in (os.path.join(dest_dir, name),):
+        if os.path.isfile(path):
+            os.remove(path)
     at = lt.add_torrent_params()
     at.save_path = dest_dir
     at.info_hashes = ih_from_hex(info_hash) if isinstance(info_hash, str) else info_hash

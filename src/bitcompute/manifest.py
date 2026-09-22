@@ -22,6 +22,7 @@ class JobManifest:
     executor: str
     params: dict
     redundancy: int = 1
+    shard_names: list[str] = field(default_factory=list)
     job_id: str = field(default="", compare=False)
 
     @classmethod
@@ -46,6 +47,7 @@ class JobManifest:
         payload = {
             "name": self.name, "mode": self.mode,
             "shards": [hashlib.sha256(s).hexdigest() for s in self.shards],
+            "shard_names": self.shard_names,
             "units": [asdict(u) for u in self.units],
             "executor": self.executor, "params": self.params,
             "redundancy": self.redundancy,
@@ -61,5 +63,6 @@ class JobManifest:
             "units": [asdict(u) for u in self.units],
             "executor": self.executor, "params": self.params,
             "redundancy": self.redundancy,
-            "shards": {hashlib.sha256(s).hexdigest(): s.hex() for s in self.shards},
+            "shard_names": self.shard_names,
+            "shards": [s.hex() for s in self.shards],
         }).encode()

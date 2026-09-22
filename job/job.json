@@ -1,0 +1,1 @@
+{"name": "e2e", "mode": "train", "shard_files": ["shard-a", "shard-b"], "units": [{"uid": "r0-s0", "round": 0, "shard": "shard-a"}, {"uid": "r0-s1", "round": 0, "shard": "shard-b"}], "executor": "train_numpy", "params": {"lr": 0.01, "steps": 2000}, "redundancy": 1}
