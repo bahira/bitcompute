@@ -20,3 +20,22 @@ def test_infer_llama_registered():
     import bitcompute.executors.infer_llama  # noqa: F401 (registers)
     from bitcompute import executor as ex
     assert ex.registry()["infer_llama"].name == "infer_llama"
+
+
+@pytestmark
+def test_infer_llama_lazy_init():
+    from bitcompute.executors.infer_llama import InferLlama
+    ex = InferLlama(n_ctx=512)
+    assert ex._llm is None  # not yet constructed
+    ex.run(unit_uid="u", shard=b"1+1=", params={"max_tokens": 4})
+    assert ex._llm is not None
+    assert ex._llm.n_ctx() == 512
+
+
+@pytestmark
+def test_infer_llama_env_model_override(monkeypatch):
+    from bitcompute.executors.infer_llama import InferLlama, _MODEL_PATH
+    monkeypatch.setenv("BITCOMPUTE_MODEL", _MODEL_PATH)
+    ex = InferLlama()
+    ex.run(unit_uid="u", shard=b"hi", params={"max_tokens": 4})
+    assert ex._llm.model_path == _MODEL_PATH
