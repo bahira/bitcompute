@@ -6,3 +6,4 @@ build/
 *.gguf
 result.bin
 .venv/
+models/*.gguf
