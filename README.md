@@ -46,7 +46,13 @@ python -m pytest
 | piece | chunk of the manifest payload; one piece maps to one work-unit result |
 | seed | holds the magnet, serves the manifest, collects `result_<port>.json`, aggregates into `result.bin`/`summary.json` |
 | 2 workers | compute peers (default ports 6882/6883), each fetches the manifest, runs its units via the registered executor |
-| tit-for-tat | libtorrent's piece-exchange fairness rule governing peer uploads |
+| tit-for-tat | `incentive.Ledger` + `should_unchoke()` rank contributors (net bytes) and order the aggregation |
+| verification | every result is also re-fetched as its own torrent (`torrent_verified` in `summary.json`) |
+
+## Discovery modes
+
+- localhost: direct peer injection (`--seed-port`) + DHT bootstrap (`dht_bootstrap_nodes`)
+- resume: each worker writes `resume_<port>.dat` via libtorrent; a restarted peer continues from it
 
 ## Adding an executor
 

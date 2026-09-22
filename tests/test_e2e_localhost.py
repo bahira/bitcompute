@@ -3,6 +3,7 @@ import os
 import struct
 import subprocess
 import sys
+import threading
 
 from bitcompute import node
 from bitcompute import torrent as bt
@@ -39,15 +40,18 @@ def test_e2e_train_three_nodes(tmp_path):
     # seed holds the magnet; workers fetch from it while it is alive (ports 7001-7004)
     man = node.load_manifest(jd)
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", 7001)
-    b1 = node.run_worker(magnet, jd, 7002, 7001)
-    b2 = node.run_worker(magnet, jd, 7003, 7001)
-    sess.pause()
+    th = [threading.Thread(target=node.run_worker, args=(magnet, jd, 7002, 7001)),
+          threading.Thread(target=node.run_worker, args=(magnet, jd, 7003, 7001))]
+    [t.start() for t in th]
     summary = node.seed_job(jd, port=7004, worker_ports=(7002, 7003))
+    sess.pause()
+    [t.join(40) for t in th]
 
     assert abs(summary["w"] - 2.0) < 0.3
     assert abs(summary["b"] - 1.0) < 0.3
     assert summary["workers"] == 2
-    assert len(b1["units"]) == 2 and len(b2["units"]) == 2
+    assert all(summary["torrent_verified"].values())
+    assert summary["torrent_verified"] == {7002: True, 7003: True}
 
     raw = open(os.path.join(jd, "result.bin"), "rb").read()
     assert len(raw) == 16
@@ -77,13 +81,15 @@ def test_e2e_infer_three_nodes(tmp_path):
 
     man = node.load_manifest(jd)
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", 7011)
-    b1 = node.run_worker(magnet, jd, 7012, 7011)
-    b2 = node.run_worker(magnet, jd, 7013, 7011)
-    sess.pause()
+    th = [threading.Thread(target=node.run_worker, args=(magnet, jd, 7012, 7011)),
+          threading.Thread(target=node.run_worker, args=(magnet, jd, 7013, 7011))]
+    [t.start() for t in th]
     summary = node.seed_job(jd, port=7014, worker_ports=(7012, 7013))
+    sess.pause()
+    [t.join(40) for t in th]
 
     assert summary["workers"] == 2
-    assert len(b1["units"]) == 3 and len(b2["units"]) == 3
+    assert all(summary["torrent_verified"].values())
     units = summary["units"]
     assert len(units) == 3
     assert all(isinstance(v, str) and v for v in units.values())

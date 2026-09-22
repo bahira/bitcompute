@@ -9,8 +9,9 @@ import time
 from bitcompute import torrent as bt
 from bitcompute.capability import Capability
 from bitcompute.executor import get as get_executor
+from bitcompute.incentive import Ledger, should_unchoke
 from bitcompute.manifest import JobManifest, WorkUnit
-from bitcompute.verify import majority_vote, median_vote
+from bitcompute.verify import majority_vote
 
 
 def _fmt_for(executor: str) -> str | None:
@@ -36,9 +37,13 @@ def load_manifest(job_dir: str) -> JobManifest:
 def run_worker(magnet: str, job_dir: str, port: int, seed_port: int) -> dict:
     """Join the swarm, compute this node's units, publish results. Returns payload dict."""
     dest = job_dir
-    handle, sess = bt.fetch(magnet, dest, port, seed_port=seed_port)
-    if not bt.wait(handle, timeout=60):
+    bootstrap = f"127.0.0.1:{seed_port}"
+    resume = os.path.join(job_dir, f"resume_{port}.dat")
+    handle, sess = bt.fetch(magnet, dest, port, seed_port=seed_port,
+                            bootstrap=bootstrap, resume_path=resume)
+    if not bt.wait(handle, timeout=90):
         raise RuntimeError(f"manifest not fetched in time (port {port})")
+    bt.save_resume(handle, resume)
     payload = json.loads(bt.read_result(handle).decode())
     shards = dict(zip(payload["shard_names"],
                       (bytes.fromhex(h) for h in payload["shards"])))
@@ -53,13 +58,19 @@ def run_worker(magnet: str, job_dir: str, port: int, seed_port: int) -> dict:
         shard = shards.get(key, b"")
         result = executor.run(unit_uid=u.uid, shard=shard, params=payload["params"])
         out[u.uid] = result.hex()
+        cap.have.add(u.uid)
     body = {"worker_port": port, "executor": payload["executor"], "units": out}
+    blob = json.dumps(body).encode()
     with open(os.path.join(job_dir, f"result_{port}.json"), "w", encoding="utf-8") as f:
         f.write(json.dumps(body))
+    # ponytail: 20s grace so the seed can pull our result torrent before we exit
+    bt.seed_in_session(sess, blob, f"result_{port}.json")
+    time.sleep(20)
+    sess.pause()
     return body
 
 
-def _collect(job_dir: str, worker_ports: tuple[int, ...], timeout: float = 30.0) -> list[dict]:
+def _collect(job_dir: str, worker_ports: tuple[int, ...], timeout: float = 45.0) -> list[dict]:
     t0 = time.time()
     got: dict[int, dict] = {}
     while time.time() - t0 < timeout and len(got) < len(worker_ports):
@@ -74,14 +85,48 @@ def _collect(job_dir: str, worker_ports: tuple[int, ...], timeout: float = 30.0)
     return list(got.values())
 
 
+def _verify_result_torrents(job_dir: str, magnet: str, results: list[dict],
+                             seed_port: int, fetch_sess) -> dict[int, bool]:
+    """Fetch each worker's result torrent over the swarm; True if bytes match disk."""
+    verified: dict[int, bool] = {}
+    for k, r in enumerate(results):
+        wp = r["worker_port"]
+        blob = json.dumps(r).encode()
+        hex_ = bt.hash_of(blob, f"result_{wp}.json")
+        dest = job_dir
+        path = os.path.join(dest, f"result_{wp}.json")
+        sess = bt.lt.session(bt._settings(seed_port + 1 + k))
+        h2, _ = bt.fetch(hex_, dest, wp, seed_port=wp,
+                         name=f"result_{wp}.json", session=sess)
+        ok = bt.wait(h2, timeout=25)
+        data = bt.read_result(h2) if ok else b""
+        sess.pause()
+        verified[wp] = ok and data == blob and bt.checksum(data) == bt.checksum(blob)
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                verified[wp] = verified[wp] and json.loads(f.read()) == r
+    return verified
+
+
 def seed_job(job_dir: str, port: int = 6881,
              worker_ports: tuple[int, ...] = (6882, 6883)) -> dict:
     """Seed manifest, gather worker results, aggregate, write result.bin/result.json."""
     man = load_manifest(job_dir)
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", port)
     results = _collect(job_dir, worker_ports)
+    time.sleep(2)  # ponytail: let worker sessions finish announcing their result torrents
+    led = Ledger()
+    for r in results:
+        led.record(str(r["worker_port"]),
+                   contributed=os.path.getsize(
+                       os.path.join(job_dir, f"result_{r['worker_port']}.json")),
+                   received=1)
+    ranked = should_unchoke(led, max_unchoked=max(1, len(results)))
+    results.sort(key=lambda r: (ranked.index(str(r["worker_port"]))
+                                if str(r["worker_port"]) in ranked else 99,
+                                r["worker_port"]))
+    torrent_ok = _verify_result_torrents(job_dir, magnet, results, port, None)
     if man.mode == "train":
-        # coordinate-wise mean over all worker/unit vectors (data-parallel toy)
         vecs = [struct.unpack("<2d", bytes.fromhex(h)) for r in results
                 for h in r["units"].values()]
         if not vecs:
@@ -104,10 +149,11 @@ def seed_job(job_dir: str, port: int = 6881,
             f.write(json.dumps(merged_infer))
         summary = {"job_id": man.job_id, "mode": "infer", "units": merged_infer,
                    "workers": len(results)}
+    summary["torrent_verified"] = torrent_ok
+    summary["magnet"] = magnet
     sess.pause()
     with open(os.path.join(job_dir, "summary.json"), "w", encoding="utf-8") as f:
         f.write(json.dumps(summary))
-    summary["magnet"] = magnet
     return summary
 
 
@@ -117,3 +163,4 @@ def status(job_dir: str) -> dict:
         return {"state": "in_progress"}
     with open(p, encoding="utf-8") as f:
         return json.loads(f.read())
+

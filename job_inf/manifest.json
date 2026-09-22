@@ -1,0 +1,1 @@
+{"job_id": "c7c607502141b79a809ba9eb65a5e360773a31d60d320e616b91ab8e8e1f79f6", "name": "inf", "mode": "infer", "units": [{"uid": "i0", "round": 0, "shard": null, "input_ref": "q1"}], "executor": "infer_llama", "params": {"max_tokens": 8, "temperature": 0.0}, "redundancy": 1, "shard_names": ["q1"], "shards": ["312b313d0d0a"]}

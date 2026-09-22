@@ -1,0 +1,1 @@
+{"name": "i", "mode": "infer", "shard_files": ["q1"], "units": [{"uid": "i0", "round": 0, "input_ref": "q1"}], "executor": "mock", "params": {}, "redundancy": 1}

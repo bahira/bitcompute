@@ -9,14 +9,17 @@ import time
 import libtorrent as lt
 
 
-def _session(port: int) -> lt.session:
-    return lt.session({
+def _settings(port: int, bootstrap: str = "") -> dict:
+    s = {
         "listen_interfaces": f"0.0.0.0:{port}",
-        "enable_dht": False,
+        "enable_dht": True,
         "enable_lsd": False,
         "enable_upnp": False,
         "enable_natpmp": False,
-    })
+    }
+    if bootstrap:
+        s["dht_bootstrap_nodes"] = bootstrap
+    return s
 
 
 def make_torrent_info(payload: bytes, name: str) -> tuple[lt.torrent_info, str]:
@@ -29,6 +32,7 @@ def make_torrent_info(payload: bytes, name: str) -> tuple[lt.torrent_info, str]:
     fs.add_file(name, len(payload))
     t = lt.create_torrent(fs)
     t.piece_length = 16 * 1024
+    t.creation_date = 0
     lt.set_piece_hashes(t, d)
     ti = lt.torrent_info(lt.bencode(t.generate()))
     return ti, d
@@ -42,19 +46,33 @@ def ih_from_hex(h: str) -> lt.info_hash_t:
     return lt.info_hash_t(lt.sha1_hash(bytes.fromhex(h)))
 
 
-def seed_bytes(payload: bytes, name: str, port: int):
+def hash_of(payload: bytes, name: str) -> str:
+    """Deterministic info-hash of a payload (creation_date fixed to 0)."""
+    ti, _ = make_torrent_info(payload, name)
+    return ih_hex(ti.info_hashes())
+
+
+def seed_bytes(payload: bytes, name: str, port: int, bootstrap: str = ""):
     """Create a single-file torrent and seed it. Returns (handle, session, hex)."""
     ti, d = make_torrent_info(payload, name)
-    sess = _session(port)
+    sess = lt.session(_settings(port, bootstrap))
     h = sess.add_torrent({"ti": ti, "save_path": d})
     return h, sess, ih_hex(ti.info_hashes())
 
 
+def seed_in_session(sess: lt.session, payload: bytes, name: str):
+    """Add an extra seeded torrent to an existing session. Returns (handle, hex)."""
+    ti, d = make_torrent_info(payload, name)
+    h = sess.add_torrent({"ti": ti, "save_path": d})
+    return h, ih_hex(ti.info_hashes())
+
+
 def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
-          seed_host: str = "127.0.0.1", seed_port: int = 6881,
-          name: str = "manifest.json"):
-    """Join a swarm via direct peer injection. Returns (handle, session)."""
-    sess = _session(port)
+           seed_host: str = "127.0.0.1", seed_port: int = 6881,
+           name: str = "manifest.json", bootstrap: str = "",
+           resume_path: str = "", session: lt.session | None = None):
+    """Join a swarm via direct peer injection (+DHT bootstrap). Returns (handle, session)."""
+    sess = session if session is not None else lt.session(_settings(port, bootstrap))
     for path in (os.path.join(dest_dir, name),):
         if os.path.isfile(path):
             os.remove(path)
@@ -62,7 +80,12 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
     at.save_path = dest_dir
     at.info_hashes = ih_from_hex(info_hash) if isinstance(info_hash, str) else info_hash
     at.peers = [(seed_host, seed_port)]
-    return sess.add_torrent(at), sess
+    if resume_path and os.path.isfile(resume_path):
+        with open(resume_path, "rb") as f:
+            raw = f.read()
+        if raw:
+            at.resume_data = list(raw.decode("latin-1"))
+    return sess.add_torrent(at), sess if session is None else sess
 
 
 def wait(handle, timeout: float = 30.0) -> bool:
@@ -74,6 +97,12 @@ def wait(handle, timeout: float = 30.0) -> bool:
             return True
         time.sleep(0.3)
     return False
+
+
+def save_resume(handle, resume_path: str) -> None:
+    raw = lt.bencode(handle.write_resume_data())
+    with open(resume_path, "wb") as f:
+        f.write(raw)
 
 
 def read_result(handle) -> bytes:

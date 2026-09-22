@@ -1,0 +1,1 @@
+{"name":"inf","mode":"infer","shard_files":["q1"],"units":[{"uid":"i0","round":0,"input_ref":"q1"}],"executor":"infer_llama","params":{"max_tokens":8,"temperature":0.0},"redundancy":1}
