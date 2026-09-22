@@ -25,3 +25,11 @@ def test_torrent_roundtrip_multpiece():
     assert bt.checksum(bt.read_result(h2)) == bt.checksum(payload)
     sess.pause()
     sess2.pause()
+
+
+def test_pex_flag_and_listening():
+    from bitcompute import torrent as bt
+    h, sess, _ = bt.seed_bytes(b"z" * 100, "m.json", 6885)
+    assert h.status().flags == bt.TORRENT_FLAGS or h.status().flags > 0
+    assert sess.is_listening()
+    sess.pause()

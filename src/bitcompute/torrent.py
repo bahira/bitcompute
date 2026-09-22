@@ -30,6 +30,9 @@ def _settings(port: int, bootstrap: str = "") -> dict:
     return s
 
 
+TORRENT_FLAGS = int(lt.torrent_flags.default_flags)
+
+
 def make_torrent_info(payload: bytes, name: str) -> tuple[lt.torrent_info, str]:
     """Build a single-file torrent in a temp dir. Returns (torrent_info, dir)."""
     d = tempfile.mkdtemp()
@@ -64,14 +67,14 @@ def seed_bytes(payload: bytes, name: str, port: int, bootstrap: str = ""):
     """Create a single-file torrent and seed it. Returns (handle, session, hex)."""
     ti, d = make_torrent_info(payload, name)
     sess = lt.session(_settings(port, bootstrap))
-    h = sess.add_torrent({"ti": ti, "save_path": d})
+    h = sess.add_torrent({"ti": ti, "save_path": d, "flags": TORRENT_FLAGS})
     return h, sess, ih_hex(ti.info_hashes())
 
 
 def seed_in_session(sess: lt.session, payload: bytes, name: str):
     """Add an extra seeded torrent to an existing session. Returns (handle, hex)."""
     ti, d = make_torrent_info(payload, name)
-    h = sess.add_torrent({"ti": ti, "save_path": d})
+    h = sess.add_torrent({"ti": ti, "save_path": d, "flags": TORRENT_FLAGS})
     return h, ih_hex(ti.info_hashes())
 
 
@@ -87,6 +90,7 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
         except OSError:
             pass
     at = lt.add_torrent_params()
+    at.flags = TORRENT_FLAGS
     at.save_path = dest_dir
     at.info_hashes = ih_from_hex(info_hash) if isinstance(info_hash, str) else info_hash
     at.peers = [(seed_host, seed_port)]

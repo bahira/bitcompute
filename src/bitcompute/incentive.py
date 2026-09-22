@@ -16,6 +16,16 @@ class Ledger:
         c, r = self.peers.get(peer, [0, 0])
         return c - r
 
+    def tokens(self, peer: str) -> int:
+        """Cumulative bytes contributed (mini-staking credit)."""
+        c, _ = self.peers.get(peer, [0, 0])
+        return c
+
+
+def staking(led: Ledger) -> dict[str, int]:
+    """Per-peer token credit table."""
+    return {p: led.tokens(p) for p in led.peers}
+
 
 def should_unchoke(led: Ledger, max_unchoked: int) -> list[str]:
     """Rank by net contribution; leave 1 slot for optimistic unchoke."""

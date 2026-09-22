@@ -36,3 +36,14 @@ def test_record_accumulates():
     led.record("A", 5, 2)
     assert led.peers["A"] == [15, 3]
     assert led.net("A") == 12
+
+
+def test_tokens_and_staking():
+    from bitcompute.incentive import staking
+    led = Ledger()
+    led.record("A", 100, 10)
+    led.record("B", 5, 3)
+    assert led.tokens("A") == 100
+    assert led.tokens("B") == 5
+    assert staking(led) == {"A": 100, "B": 5}
+    assert should_unchoke(led, max_unchoked=2)[0] == "A"
