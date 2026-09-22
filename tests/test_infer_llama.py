@@ -39,3 +39,11 @@ def test_infer_llama_env_model_override(monkeypatch):
     ex = InferLlama()
     ex.run(unit_uid="u", shard=b"hi", params={"max_tokens": 4})
     assert ex._llm.model_path == _MODEL_PATH
+
+
+def test_hf_url_build():
+    from bitcompute.executors.infer_llama import _hf_url
+    assert _hf_url(
+        "Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf") == (
+        "https://hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/"
+        "qwen2.5-0.5b-instruct-q4_k_m.gguf")

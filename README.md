@@ -32,8 +32,14 @@ src/bitcompute/
 ├─ capability.py   # Capability wanted/have
 └─ executors/
    ├─ train_numpy.py   # toy SGD trainer (fmt 2d packed vectors)
-   └─ infer_llama.py   # Qwen2.5-0.5B via llama-cpp-python (n_ctx/model params)
+   └─ infer_llama.py   # GGUF SLM via llama-cpp-python; model id: "owner/repo/file.gguf"
 ```
+
+The infer executor accepts a `model` param as a Hugging Face id triple (e.g.
+`Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf`), cached
+once from `hf.co/.../resolve/main/<file>`; or env `BITCOMPUTE_MODEL`; or a
+local path. The dashboard (`index.html`) exposes a select box for the
+available quantizations and prints the ready-to-use `params` JSON.
 
 ## Live network state
 
@@ -80,16 +86,15 @@ k≥3; the deterministic gate rejects non-deterministic repeats.
 ## Tests & benchmarks
 
 ```
-python -m pytest -q        # 41 passed, localhost-only, no external services
+python -m pytest -q        # 43 passed, localhost-only, no external services
 python tools/bench.py      # fetch latencies: ~0.64-0.75 s for 16KB-2MB
+python tools/make_dashboard.py   # regenerate index.html from network.json
 ```
 
-## Roadmap (open issues)
+## Roadmap
 
-- #19 PEX/IPv6 validation on public DHT routers (2 machines)
-- #20 mini-staking: per-byte credit as exchange token
-- #21 PyPI packaging + semver tags
-- #22 static HTML dashboard generated from network.json
+Closed in v0.1.0: #19 PEX/IPv6 flags + routers, #20 mini-staking tokens,
+#21 PyPI packaging + tag, #22 dashboard `index.html`.
 
 ## License
 

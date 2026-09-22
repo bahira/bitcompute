@@ -29,7 +29,28 @@ def build() -> str:
         "<a href='README.md'>README</a></p>"
         "<table><tr><th>Job</th><th>Mode</th><th>Magnet</th><th>Workers</th>"
         "<th>Result</th><th>Torrents verified</th><th>Tokens (bytes/pieces)</th></tr>"
-        + "".join(rows) + "</table></body></html>")
+        + "".join(rows) + "</table>"
+        "<h2>HF model select (infer executor)</h2>"
+        "<select id='m' style='padding:4px'>"
+        "<option value='Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf' selected>"
+        "Qwen2.5-0.5B-Instruct q4_k_m (default)</option>"
+        "<option value='Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_0.gguf'>"
+        "q4_0</option>"
+        "<option value='Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q5_k_m.gguf'>"
+        "q5_k_m</option>"
+        "<option value='Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q8_0.gguf'>"
+        "q8_0</option>"
+        "</select>"
+        "<pre id='j' style='background:#f6f8fa;padding:8px;border:1px solid #ccc'></pre>"
+        "<script>const M=["
+        "['q4_k_m','Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf'],"
+        "['q4_0','Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_0.gguf'],"
+        "['q5_k_m','Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q5_k_m.gguf'],"
+        "['q8_0','Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q8_0.gguf']];"
+        "function upd(){const i=M.findIndex(m=>m[1]===document.getElementById('m').value);"
+        "document.getElementById('j').textContent="
+        "JSON.stringify({model:M[i][1],n_ctx:512,max_tokens:64,temperature:0},null,1);} "
+        "document.getElementById('m').onchange=upd;upd();</script></body></html>")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 {
- "generated": 1790111770,
+ "generated": 1790118909,
  "jobs": [
   {
    "name": "toy-train",
@@ -29,17 +29,17 @@
   {
    "name": "slm-infer",
    "mode": "infer",
-   "magnet": "060e63e66ca3d129a6c134bd24353a6faf9c4739",
+   "magnet": "b347311410528d67df0c8125e6bec8267295c43a",
    "seed_port": 7411,
    "workers": 1,
    "result": {
     "i0": "2, 2+2=4"
    },
    "torrent_verified": {
-    "7412": true
+    "7413": true
    },
    "tokens": {
-    "7412": {
+    "7413": {
      "bytes": 85,
      "pieces": 1
     }

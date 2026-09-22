@@ -115,7 +115,7 @@ def seed_job(job_dir: str, port: int = 6881,
     man = load_manifest(job_dir)
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", port)
     results = _collect(job_dir, worker_ports)
-    time.sleep(2)  # ponytail: let worker sessions finish announcing their result torrents
+    time.sleep(4)  # ponytail: let worker sessions announce result torrents (2 sessions cold = ~2-3s each)
     led = Ledger()
     for r in results:
         led.record(str(r["worker_port"]),
