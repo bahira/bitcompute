@@ -99,3 +99,8 @@ Closed in v0.1.0: #19 PEX/IPv6 flags + routers, #20 mini-staking tokens,
 ## License
 
 MIT
+## Clients
+
+- `dist/bitcompute.exe` — one-file console+Tk UI (PyInstaller). Console: same 3 subcommands as
+  `python -m bitcompute.cli`; without args it opens the Tk notebook (Seed / Worker / Status tabs,
+  HF model select for `params.model`).
