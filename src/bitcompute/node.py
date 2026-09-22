@@ -99,7 +99,7 @@ def seed_job(job_dir: str, port: int = 6881,
         for uid in uid_order:
             vals = [bytes.fromhex(r["units"][uid]) for r in results if uid in r["units"]]
             if vals:
-                merged_infer[uid] = majority_vote(vals).decode()
+                merged_infer[uid] = majority_vote(vals).decode("latin-1")
         with open(os.path.join(job_dir, "result.json"), "w", encoding="utf-8") as f:
             f.write(json.dumps(merged_infer))
         summary = {"job_id": man.job_id, "mode": "infer", "units": merged_infer,

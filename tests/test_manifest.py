@@ -78,8 +78,8 @@ def test_to_torrent_payload_roundtrips_json():
     assert data["name"] == "demo"
     assert data["mode"] == "train"
     assert data["redundancy"] == 2
-    assert set(data["shards"].keys()) == {h for h in (hashlib.sha256(s).hexdigest() for s in m.shards)}
-    assert list(data["shards"].values()) == [s.hex() for s in m.shards]
+    assert data["shards"] == [s.hex() for s in m.shards]
+    assert data["shard_names"] == m.shard_names
     assert data["units"][0]["uid"] == "u1"
 
 
