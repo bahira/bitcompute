@@ -1,0 +1,33 @@
+{
+ "generated": 1790103167,
+ "jobs": [
+  {
+   "name": "toy-train",
+   "mode": "train",
+   "magnet": "f2828d046efd63c3bdb48c21363cf5c66a160357",
+   "seed_port": 7401,
+   "workers": 2,
+   "result": {
+    "w": 2.0014,
+    "b": 0.9711
+   },
+   "torrent_verified": {
+    "7402": true,
+    "7403": true
+   }
+  },
+  {
+   "name": "slm-infer",
+   "mode": "infer",
+   "magnet": "060e63e66ca3d129a6c134bd24353a6faf9c4739",
+   "seed_port": 7411,
+   "workers": 1,
+   "result": {
+    "i0": "2, 2+2=4"
+   },
+   "torrent_verified": {
+    "7412": true
+   }
+  }
+ ]
+}

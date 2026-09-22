@@ -1,1 +1,0 @@
-{"job_id": "c9fbf72a3262d7e12ba06ed30eb032d11554db62c4c0384fb6f80aa9a4787e04", "name": "i", "mode": "infer", "units": [{"uid": "i0", "round": 0, "shard": null, "input_ref": "q1"}], "executor": "mock", "params": {}, "redundancy": 1, "shard_names": ["q1"], "shards": ["70696e67"]}

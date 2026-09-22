@@ -1,1 +1,0 @@
-{"name": "t", "mode": "train", "shard_files": ["s1"], "units": [{"uid": "r0-s0", "round": 0, "shard": "s1"}], "executor": "train_numpy", "params": {"lr": 0.01, "steps": 500}, "redundancy": 1}

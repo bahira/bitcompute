@@ -67,6 +67,33 @@ Reference implementations: `executors/train_numpy.py` (toy linear regression),
 ## Skipped (by design)
 
 - tokens (no per-piece token accounting)
-- DHT (disabled; direct peer injection only)
+- DHT bootstrap nodes configured in-process (127.0.0.1); multi-machine routers = next step
 - sandbox (executors run in-process, no isolation)
 - pex (no peer-exchange protocol)
+
+## Network state (live data in [`network.json`](network.json))
+
+| Job | Mode | Magnet (info-hash) | Seed port | Workers | Result |
+| --- | --- | --- | --- | --- | --- |
+| toy-train | train | `6b248be686ae3b84c00e24501fa08841c442ecaa` | 7401 | 2 | w=2.0014, b=0.9711 |
+| slm-infer | infer (Qwen2.5-0.5B) | `096509555d5346e4b37573454724aad6b6f62587` | 7411 | 1 | "1+1=2, 2+2=4" |
+
+Torrent verification of every result: all `True` in `network.json`.
+
+## Participer (auto-compute)
+
+Terminal 1 (seed, publie le manifest):
+
+```
+python -m bitcompute.cli seed job --port 7401 --workers 7402 7403
+```
+
+Terminal 2+3 (workers = participants qui prêtent leur GPU/CPU):
+
+```
+python -m bitcompute.cli worker --magnet 6b248be686ae3b84c00e24501fa08841c442ecaa --job-dir job --port 7402 --seed-port 7401
+python -m bitcompute.cli worker --magnet 6b248be686ae3b84c00e24501fa08841c442ecaa --job-dir job --port 7403 --seed-port 7401
+```
+
+Le seed imprime le JSON d'etat (magnet + `torrent_verified` + median) et écrit
+`summary.json` / `result.bin`; `status job` les relit.

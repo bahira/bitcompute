@@ -74,8 +74,10 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
     """Join a swarm via direct peer injection (+DHT bootstrap). Returns (handle, session)."""
     sess = session if session is not None else lt.session(_settings(port, bootstrap))
     for path in (os.path.join(dest_dir, name),):
-        if os.path.isfile(path):
+        try:
             os.remove(path)
+        except OSError:
+            pass
     at = lt.add_torrent_params()
     at.save_path = dest_dir
     at.info_hashes = ih_from_hex(info_hash) if isinstance(info_hash, str) else info_hash
