@@ -1,4 +1,4 @@
-"""Single-file Tkinter client + console entry for bitcompute.
+"""Single-file client for bitcompute: console subcommands + Tk UI.
 
 Usage:
   python client.py seed job --port 7401 --workers 7402 7403
@@ -61,81 +61,133 @@ def _console(argv):
     return 0
 
 
+# ---------------------------------------------------------------- UI
+
+_BG = "#0d1115"
+_CARD = "#151b21"
+_ACC = "#00e5a0"
+_TX = "#e8eef2"
+_MUT = "#9fb2bf"
+_FONT = "Segoe UI"
+_MONO = "Consolas"
+
+
+def _style(s):
+    s.theme_use("clam")
+    s.configure(".", font=(_FONT, 10), background=_BG, foreground=_TX,
+                borderwidth=0, padding=6)
+    s.configure("TFrame", background=_BG)
+    s.configure("Card.TFrame", background=_CARD, padding=10, relief="flat")
+    s.configure("TLabel", background=_BG, foreground=_TX)
+    s.configure("Mut.TLabel", foreground=_MUT)
+    s.configure("H.TLabel", font=(_FONT, 14, "bold"), foreground=_ACC)
+    s.configure("TNotebook", background=_BG, tabpadded=14)
+    s.map("TNotebook",
+          background=[("selected", _ACC), ("!selected", _CARD)],
+          foreground=[("selected", "#06100b"), ("!selected", _MUT)])
+    s.configure("TNotebook.Tab", font=(_FONT, 10, "bold"), padding=(12, 6))
+    s.configure("TEntry", font=(_MONO, 10), fieldbackground="#1c242b",
+                insertcolor=_ACC, padding=4)
+    s.map("TEntry", fieldbackground=[("focus", "#222c34")])
+    s.configure("TCombobox", font=(_MONO, 10), fieldbackground="#1c242b",
+                arrowcolor=_MUT, padding=4)
+    s.map("TCombobox", fieldbackground=[("focus", "#222c34")])
+    s.configure("TButton", font=(_FONT, 10, "bold"), background=_ACC,
+                foreground="#06100b", padding=(14, 7), relief="flat")
+    s.map("TButton", background=[("active", "#3ef0b4"), ("pressed", "#00c78d")])
+    s.configure("TScrollbAr", background=_CARD, troughcolor=_BG,
+                lightcolor=_ACC)
+
+
 def _ui():
     import tkinter as tk
     from tkinter import ttk
 
     root = tk.Tk()
     root.title("bitcompute — p2p compute client")
-    nb = ttk.Notebook(root)
-    nb.pack(fill="both", expand=True, padx=8, pady=8)
+    root.configure(bg=_BG)
+    _style(ttk.Style(root))
 
-    out = ttk.Frame(root)
-    out.pack(fill="both", expand=True)
-    txt = tk.Text(out, height=18)
-    txt.pack(fill="both", expand=True)
-    txt.insert("1.0", "Ready.\n")
+    top = ttk.Frame(root)
+    top.pack(fill="x", padx=14, pady=(12, 2))
+    ttk.Label(top, text="bitcompute", style="H.TLabel").pack(side="left")
+    ttk.Label(top, text="swarm compute · 127.0.0.1", style="Mut.TLabel")\
+        .pack(side="right")
+
+    nb = ttk.Notebook(root)
+    nb.pack(fill="both", expand=True, padx=14, pady=6)
+
+    out = tk.Text(root, height=16, bg=_CARD, fg=_TX, insertbackground=_ACC,
+                  relief="flat", font=(_MONO, 10), padx=10, pady=8)
+    out.pack(fill="both", expand=False, padx=14, pady=(0, 12))
+    out.insert("1.0", "ready\n")
 
     def log(msg):
-        txt.insert("end", str(msg) + "\n")
-        txt.see("end")
+        out.insert("end", str(msg) + "\n")
+        out.see("end")
 
-    def job(title, fn):
+    def job(fn):
         def work():
             try:
                 res = fn()
                 root.after(0, lambda: log(json.dumps(res, indent=1)))
             except Exception as e:  # noqa: BLE001
-                root.after(0, lambda: log(f"ERROR: {e}"))
+                root.after(0, lambda: log(f"error: {e}"))
         threading.Thread(target=work, daemon=True).start()
 
-    # ---- Seed tab ----
-    f1 = ttk.Frame(nb)
-    nb.add(f1, text="Seed")
-    ttk.Label(f1, text="job dir").grid(row=0, column=0, sticky="w")
-    seed_dir = ttk.Entry(f1); seed_dir.insert(0, "job"); seed_dir.grid(row=0, column=1)
-    ttk.Label(f1, text="seed port").grid(row=1, column=0, sticky="w")
-    seed_port = ttk.Entry(f1); seed_port.insert(0, "7401"); seed_port.grid(row=1, column=1)
-    ttk.Label(f1, text="workers (espace)").grid(row=2, column=0, sticky="w")
-    seed_w = ttk.Entry(f1); seed_w.insert(0, "7402 7403"); seed_w.grid(row=2, column=1)
-    ttk.Button(f1, text="Run seed", command=lambda: job(
-        "seed", lambda: run_seed(seed_dir.get(), int(seed_port.get()),
-                                [int(x) for x in seed_w.get().split()])))\
-        .grid(row=3, column=0, pady=6)
+    def field(parent, row, label, default="", width=34):
+        ttk.Label(parent, text=label, style="Mut.TLabel")\
+            .grid(row=row, column=0, sticky="w", padx=(0, 10), pady=4)
+        e = ttk.Entry(parent, width=width)
+        if default:
+            e.insert(0, default)
+        e.grid(row=row, column=1, sticky="we", pady=4)
+        return e
 
-    # ---- Worker tab ----
-    f2 = ttk.Frame(nb)
-    nb.add(f2, text="Worker")
-    ttk.Label(f2, text="magnet (40 hex)").grid(row=0, column=0, sticky="w")
-    w_mag = ttk.Entry(f2, width=48); w_mag.grid(row=0, column=1)
-    ttk.Label(f2, text="job dir").grid(row=1, column=0, sticky="w")
-    w_dir = ttk.Entry(f2); w_dir.insert(0, "job"); w_dir.grid(row=1, column=1)
-    ttk.Label(f2, text="port / seed port").grid(row=2, column=0, sticky="w")
-    w_port = ttk.Entry(f2, width=10); w_port.insert(0, "7402"); w_port.grid(row=2, column=1)
-    w_sport = ttk.Entry(f2, width=10); w_sport.insert(0, "7401"); w_sport.grid(row=2, column=2)
-    ttk.Label(f2, text="hf model").grid(row=3, column=0, sticky="w")
-    cb = ttk.Combobox(f2, values=list(_HF_MODELS), width=60)
-    cb.current(0); cb.grid(row=3, column=1, columnspan=2)
+    # Seed tab
+    f1 = ttk.Frame(nb, style="Card.TFrame")
+    nb.add(f1, text="  Seed  ")
+    sd = field(f1, 0, "job dir", "job")
+    sp = field(f1, 1, "seed port", "7401", 10)
+    sw = field(f1, 2, "workers", "7402 7403", 20)
+    ttk.Button(f1, text="Run seed", command=lambda: job(
+        lambda: run_seed(sd.get(), int(sp.get()),
+                         [int(x) for x in sw.get().split()])))\
+        .grid(row=3, column=0, sticky="w", pady=10)
+
+    # Worker tab
+    f2 = ttk.Frame(nb, style="Card.TFrame")
+    nb.add(f2, text="  Worker  ")
+    wm = field(f2, 0, "magnet (40 hex)", width=46)
+    wd = field(f2, 1, "job dir", "job")
+    wp = field(f2, 2, "port", "7402", 10)
+    ws = field(f2, 3, "seed port", "7401", 10)
+    ttk.Label(f2, text="hf model", style="Mut.TLabel")\
+        .grid(row=4, column=0, sticky="w", padx=(0, 10))
+    cb = ttk.Combobox(f2, values=list(_HF_MODELS), width=54, state="readonly")
+    cb.current(0)
+    cb.grid(row=4, column=1, sticky="we")
+
     def run_w():
         model = _HF_MODELS[cb.get()]
-        jj = os.path.join(w_dir.get(), "job.json")
+        jj = os.path.join(wd.get(), "job.json")
         if os.path.isfile(jj):
             with open(jj, encoding="utf-8") as f:
                 spec = json.loads(f.read())
             spec.setdefault("params", {})["model"] = model
             with open(jj, "w", encoding="utf-8") as f:
                 f.write(json.dumps(spec))
-        return run_worker_job(w_mag.get(), w_dir.get(), int(w_port.get()), int(w_sport.get()))
-    ttk.Button(f2, text="Run worker", command=lambda: job("worker", run_w))\
-        .grid(row=4, column=0, pady=6)
+        return run_worker_job(wm.get(), wd.get(), int(wp.get()), int(ws.get()))
 
-    # ---- Status tab ----
-    f3 = ttk.Frame(nb)
-    nb.add(f3, text="Status")
-    ttk.Label(f3, text="job dir").grid(row=0, column=0, sticky="w")
-    s_dir = ttk.Entry(f3); s_dir.insert(0, "job"); s_dir.grid(row=0, column=1)
+    ttk.Button(f2, text="Run worker", command=lambda: job(run_w))\
+        .grid(row=5, column=0, sticky="w", pady=10)
+
+    # Status tab
+    f3 = ttk.Frame(nb, style="Card.TFrame")
+    nb.add(f3, text="  Status  ")
+    std = field(f3, 0, "job dir", "job")
     ttk.Button(f3, text="Show summary", command=lambda: job(
-        "status", lambda: run_status(s_dir.get()))).grid(row=1, column=0, pady=6)
+        lambda: run_status(std.get()))).grid(row=1, column=0, sticky="w", pady=10)
 
     root.mainloop()
     return 0
