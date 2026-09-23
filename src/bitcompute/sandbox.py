@@ -101,25 +101,30 @@ def run_custom_executor(
     if len(payload) > MAX_REQUEST_BYTES:
         raise ValueError("custom executor request exceeds the sandbox size limit")
     try:
-        with tempfile.TemporaryFile() as stdout_file:
+        with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
             completed = subprocess.run(
                 command,
                 input=payload,
                 stdout=stdout_file,
-                stderr=subprocess.DEVNULL,
+                stderr=stderr_file,
                 timeout=EXECUTOR_TIMEOUT_SECONDS,
                 check=False,
                 env={"PATH": "/usr/local/bin:/usr/bin:/bin", "PYTHONNOUSERSITE": "1"},
             )
             stdout_file.seek(0)
             output = stdout_file.read(MAX_OUTPUT_BYTES + 1)
+            stderr_file.seek(0, 2)
+            stderr_size = stderr_file.tell()
+            stderr_file.seek(max(0, stderr_size - 2000))
+            diagnostics = stderr_file.read(2000).decode("utf-8", errors="replace").strip()
     except subprocess.TimeoutExpired as exc:
         raise TimeoutError(
             f"custom executor exceeded {EXECUTOR_TIMEOUT_SECONDS}s sandbox timeout"
         ) from exc
     if completed.returncode != 0:
+        suffix = f": {diagnostics}" if diagnostics else ""
         raise RuntimeError(
-            f"sandboxed custom executor failed with exit status {completed.returncode}"
+            f"sandboxed custom executor failed with exit status {completed.returncode}{suffix}"
         )
     if len(output) > MAX_OUTPUT_BYTES:
         raise ValueError("custom executor output exceeds the sandbox size limit")
