@@ -1,23 +1,52 @@
 [project]
 name = "bitcompute"
 version = "0.1.0"
-description = "BitTorrent-style swarm for distributed training & inference compute"
+description = "BitTorrent-style swarm for distributed training and inference compute"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
-dependencies = ["libtorrent>=2.0"]
+keywords = ["bittorrent", "distributed-computing", "machine-learning", "p2p"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = ["libtorrent>=2.0,<3"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
-llm = ["llama-cpp-python"]
+dev = ["build>=1.2", "pytest>=8", "ruff>=0.8", "twine>=5"]
+llm = ["llama-cpp-python>=0.3"]
 
 [project.scripts]
 bitcompute = "bitcompute.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/bahira/bitcompute"
+Documentation = "https://github.com/bahira/bitcompute#readme"
+Issues = "https://github.com/bahira/bitcompute/issues"
+
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+bitcompute = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]

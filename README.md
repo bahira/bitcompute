@@ -55,12 +55,12 @@ for every published result in the last run).
 ## Quick start
 
 ```
-# 1. seed the job (manifest over the swarm)
+# 1. seed the job; keep it running and copy the magnet from its "ready" line
 python -m bitcompute.cli seed job --port 7401 --workers 7402 7403
 
-# 2. N compute peers (any machine, DHT bootstrap via env for multi-machine)
-python -m bitcompute.cli worker --magnet <40-hex-magnet> --job-dir job --port 7402 --seed-port 7401
-python -m bitcompute.cli worker --magnet <40-hex-magnet> --job-dir job --port 7403 --seed-port 7401
+# 2. N compute peers (separate terminals or machines; no shared volume needed)
+bitcompute worker --magnet <40-hex-info-hash> --job-dir job --port 7402 --seed-host <seed-ip> --seed-port 7401
+bitcompute worker --magnet <40-hex-info-hash> --job-dir job --port 7403 --seed-host <seed-ip> --seed-port 7401
 
 # 3. status (reads summary.json + result.json)
 python -m bitcompute.cli status job
@@ -82,34 +82,45 @@ Multi-machine DHT: `set BITCOMPUTE_DHT_ROUTERS=ip:port;ip:port`.
 
 ## Production notes
 
-- Package `bitcompute 0.1.0` (tag `v0.1.0`), PEP-517, `pip install .` works;
-  CI matrix [3.10, 3.11] with pip cache; single-file `dist/bitcompute.exe`.
-- Ports: tests use disjoint ranges — torrent 6881-6887, node 6901-6932,
-  cli 6971-6992, resume 7440-7462, e2e 7001-7016; in one process each
-  session binds its own UDP port, so files can run sequentially without clash.
-- Cold starts: `wait` polls until file size == torrent `total_size` (no
-  half-flushed json), `_collect` timeout 75 s, worker wait 120 s, 20 s
-  announce grace.
+- PEP 517 package with Python 3.10–3.12 CI on Linux and Windows. Release
+  validation builds both wheel and sdist and runs `twine check`.
+- Incoming manifests are size-bounded, schema-validated and authenticated by
+  recomputing their content-derived `job_id`. Results carry that `job_id`, the
+  executor and worker identity, so stale or malformed files are ignored.
+- Job file names are constrained to the job directory, writes are atomic, and
+  sessions are paused in `finally` blocks. Collection and verification
+  timeouts are configurable from the CLI.
+- `--seed-host` lets workers fetch from another machine. Workers announce
+  results to the seed over HTTP (`seed port + 1000` by default), then the seed
+  downloads and verifies each result through its torrent. No shared volume is
+  required. Open both the selected TCP/UDP torrent ports and the TCP announce
+  port; set `BITCOMPUTE_DHT_ROUTERS` when needed.
+- This beta does **not** provide peer identity signatures, sandbox untrusted
+  executors, encrypt payloads, or implement payment settlement. Only run
+  executors shipped by a trusted installation and do not put secrets in jobs.
 
 ## How it works
 
 1. Seed publishes canonicalized manifest as a torrent (pieces = 16 KiB,
    sha256-verified).
 2. Each worker fetches the manifest (DHT bootstrap + direct peer injection),
-   computes its assigned units locally, writes `result_<port>.json` and
-   seeds it as its own torrent (20 s grace).
-3. Seed waits for all N result files, verifies each result torrent over the
-   swarm (bytes == json + checksum), ranks peers by ledger contribution,
+   computes its assigned units locally, seeds `result_<port>.json` as a new
+   torrent, then announces its job ID and result to the seed's HTTP control
+   plane (20 s torrent grace by default).
+3. The seed validates each announcement, immediately fetches the announced
+   result torrent from that worker, checks the bytes/content address, and
+   ranks verified peers by ledger contribution before aggregation:
    aggregates: `median_vote` (train, per-coordinate) / `majority_vote`
    (infer), writes `result.bin` + `summary.json` (with `tokens` per peer).
 
-Byzantine results (e.g. 99/99 vs median 2/1) are tolerated by the median at
-k≥3; the deterministic gate rejects non-deterministic repeats.
+Byzantine numeric results (e.g. 99/99 vs median 2/1) are tolerated when fewer
+than half of the verified replicas are malicious. Content addressing detects
+transport tampering; it does not prove that a remote executor is trustworthy.
 
 ## Tests & benchmarks
 
 ```
-python -m pytest -q        # 43 passed, localhost-only, no external services
+python -m pytest -q        # localhost integration tests; no external services
 python tools/bench.py      # fetch latencies: ~0.64-0.75 s for 16KB-2MB
 python tools/make_dashboard.py   # regenerate index.html from network.json
 ```
@@ -122,8 +133,8 @@ Closed in v0.1.0: #19 PEX/IPv6 flags + routers, #20 mini-staking tokens,
 ## License
 
 MIT
-## Clients
+## Desktop client
 
-- `dist/bitcompute.exe` � one-file console+Tk UI (PyInstaller). Console: same 3 subcommands as
-  `python -m bitcompute.cli`; without args it opens the Tk notebook (Seed / Worker / Status tabs,
-  HF model select for `params.model`).
+`python client.py` starts the optional Tk interface (Seed / Worker / Status
+ tabs). Build distributable clients from the current source with PyInstaller;
+generated binaries are intentionally not committed to the repository.
