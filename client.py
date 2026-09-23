@@ -25,12 +25,19 @@ _HF_MODELS = {
 }
 
 
-def run_seed(job_dir, port, workers):
-    return node.seed_job(job_dir, port=port, worker_ports=tuple(workers))
+def run_seed(job_dir, port, workers, on_ready=None):
+    return node.seed_job(
+        job_dir, port=port, worker_ports=tuple(workers), on_ready=on_ready
+    )
 
 
-def run_worker_job(magnet, job_dir, port, seed_port):
-    return node.run_worker(magnet, job_dir, port, seed_port)
+def run_worker_job(
+    magnet, job_dir, port, seed_port, seed_host="127.0.0.1", announce_port=None
+):
+    return node.run_worker(
+        magnet, job_dir, port, seed_port,
+        seed_host=seed_host, announce_port=announce_port,
+    )
 
 
 def run_status(job_dir):
@@ -48,14 +55,22 @@ def _console(argv):
     w.add_argument("--magnet", required=True)
     w.add_argument("--job-dir", required=True)
     w.add_argument("--port", type=int, default=7402)
+    w.add_argument("--seed-host", default="127.0.0.1")
     w.add_argument("--seed-port", type=int, default=7401)
+    w.add_argument("--announce-port", type=int)
     st = sub.add_parser("status")
     st.add_argument("job_dir")
     a = p.parse_args(argv)
     if a.cmd == "seed":
-        print(json.dumps(run_seed(a.job_dir, a.port, a.workers)))
+        def ready(event):
+            print("bitcompute: ready " + json.dumps(event), file=sys.stderr, flush=True)
+
+        print(json.dumps(run_seed(a.job_dir, a.port, a.workers, ready)))
     elif a.cmd == "worker":
-        print(json.dumps(run_worker_job(a.magnet, a.job_dir, a.port, a.seed_port)))
+        print(json.dumps(run_worker_job(
+            a.magnet, a.job_dir, a.port, a.seed_port,
+            a.seed_host, a.announce_port,
+        )))
     else:
         print(json.dumps(run_status(a.job_dir)))
     return 0
@@ -135,7 +150,9 @@ def _ui():
                 root.after(0, lambda: log(json.dumps(res, indent=1)))
             except Exception as e:  # noqa: BLE001
                 root.after(0, lambda: log(f"error: {e}"))
-        threading.Thread(target=work, daemon=True).start()    def field(parent, row, label, default="", width=34):
+        threading.Thread(target=work, daemon=True).start()
+
+    def field(parent, row, label, default="", width=34):
         ttk.Label(parent, text=label, style="Mut.TLabel")\
             .grid(row=row, column=0, sticky="w", padx=(0, 10), pady=4)
         e = ttk.Entry(parent, width=width)
@@ -151,8 +168,12 @@ def _ui():
     sp = field(f1, 1, "seed port", "7401", 10)
     sw = field(f1, 2, "workers", "7402 7403", 20)
     ttk.Button(f1, text="Run seed", command=lambda: job(
-        lambda: run_seed(sd.get(), int(sp.get()),
-                         [int(x) for x in sw.get().split()])))\
+        lambda: run_seed(
+            sd.get(), int(sp.get()), [int(x) for x in sw.get().split()],
+            lambda event: root.after(
+                0, lambda: log("ready: " + json.dumps(event))
+            ),
+        )))\
         .grid(row=3, column=0, sticky="w", pady=10)
 
     # Worker tab
@@ -161,12 +182,14 @@ def _ui():
     wm = field(f2, 0, "magnet (40 hex)", width=46)
     wd = field(f2, 1, "job dir", "job")
     wp = field(f2, 2, "port", "7402", 10)
-    ws = field(f2, 3, "seed port", "7401", 10)
+    wh = field(f2, 3, "seed host", "127.0.0.1", 24)
+    ws = field(f2, 4, "seed port", "7401", 10)
+    wa = field(f2, 5, "announce port", "8401", 10)
     ttk.Label(f2, text="hf model", style="Mut.TLabel")\
-        .grid(row=4, column=0, sticky="w", padx=(0, 10))
+        .grid(row=6, column=0, sticky="w", padx=(0, 10))
     cb = ttk.Combobox(f2, values=list(_HF_MODELS), width=54, state="readonly")
     cb.current(0)
-    cb.grid(row=4, column=1, sticky="we")
+    cb.grid(row=6, column=1, sticky="we")
 
     def run_w():
         model = _HF_MODELS[cb.get()]
@@ -177,10 +200,13 @@ def _ui():
             spec.setdefault("params", {})["model"] = model
             with open(jj, "w", encoding="utf-8") as f:
                 f.write(json.dumps(spec))
-        return run_worker_job(wm.get(), wd.get(), int(wp.get()), int(ws.get()))
+        return run_worker_job(
+            wm.get(), wd.get(), int(wp.get()), int(ws.get()),
+            wh.get(), int(wa.get()),
+        )
 
     ttk.Button(f2, text="Run worker", command=lambda: job(run_w))\
-        .grid(row=5, column=0, sticky="w", pady=10)
+        .grid(row=7, column=0, sticky="w", pady=10)
 
     # Status tab
     f3 = ttk.Frame(nb, style="Card.TFrame")

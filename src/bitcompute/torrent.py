@@ -32,11 +32,18 @@ def _settings(port: int, bootstrap: str = "") -> dict:
 
 TORRENT_FLAGS = int(lt.torrent_flags.default_flags) | 2  # seed side: +pex bit
 FETCH_FLAGS = int(lt.torrent_flags.default_flags)  # fetch side: pex off (direct peers win, 2.x quirk)
+# Completed fetches may be disconnected immediately by libtorrent as redundant.
+# Remember them so peer accounting still reports the peer that supplied data.
+_COMPLETED_FETCHES: set[int] = set()
 
 
 def make_torrent_info(payload: bytes, name: str) -> tuple[lt.torrent_info, str]:
     """Build a single-file torrent in a temp dir. Returns (torrent_info, dir)."""
-    d = tempfile.mkdtemp()
+    if not isinstance(payload, bytes):
+        raise TypeError("torrent payload must be bytes")
+    if not name or os.path.basename(name) != name or name in {".", ".."}:
+        raise ValueError("torrent name must be a safe file name")
+    d = tempfile.mkdtemp(prefix="bitcompute-seed-")
     path = os.path.join(d, name)
     with open(path, "wb") as f:
         f.write(payload)
@@ -55,7 +62,13 @@ def ih_hex(ihs: lt.info_hash_t) -> str:
 
 
 def ih_from_hex(h: str) -> lt.info_hash_t:
-    return lt.info_hash_t(lt.sha1_hash(bytes.fromhex(h)))
+    if not isinstance(h, str) or len(h) != 40:
+        raise ValueError("info hash must be exactly 40 hexadecimal characters")
+    try:
+        raw = bytes.fromhex(h)
+    except ValueError as exc:
+        raise ValueError("info hash must be exactly 40 hexadecimal characters") from exc
+    return lt.info_hash_t(lt.sha1_hash(raw))
 
 
 def hash_of(payload: bytes, name: str) -> str:
@@ -84,6 +97,9 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
            name: str = "manifest.json", bootstrap: str = "",
            resume_path: str = "", session: lt.session | None = None):
     """Join a swarm via direct peer injection (+DHT bootstrap). Returns (handle, session)."""
+    if not name or os.path.basename(name) != name or name in {".", ".."}:
+        raise ValueError("torrent name must be a safe file name")
+    os.makedirs(dest_dir, exist_ok=True)
     sess = session if session is not None else lt.session(_settings(port, bootstrap))
     has_resume = bool(resume_path) and os.path.isfile(resume_path)
     for path in (os.path.join(dest_dir, name),):
@@ -122,15 +138,30 @@ def wait(handle, timeout: float = 30.0, sess=None) -> bool:
             if tf is not None:
                 p = os.path.join(st.save_path, tf.name())
                 if os.path.isfile(p) and os.path.getsize(p) == tf.total_size():
+                    _COMPLETED_FETCHES.add(id(handle))
                     return True
         time.sleep(0.1)
     return False
 
 
 def save_resume(handle, resume_path: str) -> None:
+    """Persist resume data atomically so a crash cannot leave a partial file."""
     raw = lt.bencode(handle.write_resume_data())
-    with open(resume_path, "wb") as f:
-        f.write(raw)
+    parent = os.path.dirname(os.path.abspath(resume_path))
+    os.makedirs(parent, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".resume-", dir=parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, resume_path)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def read_result(handle) -> bytes:
@@ -179,4 +210,9 @@ def peer_count(handle, timeout: float = 12.0, sess=None) -> int:
             if d >= 1:
                 return d
         time.sleep(0.2)
-    return _peers_once(handle)
+    observed = _peers_once(handle)
+    if observed:
+        return observed
+    # A completed fetch necessarily exchanged data with at least one peer,
+    # even when libtorrent already closed that now-redundant connection.
+    return 1 if id(handle) in _COMPLETED_FETCHES else 0
