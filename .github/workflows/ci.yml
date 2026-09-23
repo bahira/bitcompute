@@ -26,6 +26,36 @@ jobs:
       - run: python -m build
       - run: twine check dist/*
 
+  llm-inference:
+    name: Real GGUF inference (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install cmake ninja
+      - name: Build CPU llama-cpp backend
+        env:
+          CMAKE_ARGS: -DGGML_NATIVE=OFF
+          CMAKE_BUILD_PARALLEL_LEVEL: "2"
+        run: python -m pip install --no-cache-dir "llama-cpp-python==0.3.35"
+      - name: Download pinned CPU smoke model
+        env:
+          MODEL_URL: https://huggingface.co/itlwas/SmolLM-135M-Instruct-Q4_K_M-GGUF/resolve/9257a336c5edff070c69efc13af0fd9d5a3bb3c1/smollm-135m-instruct-q4_k_m.gguf
+          MODEL_SHA256: 285eb8b43bb5707c2522cbc3d54c4d8332fd81eef9b67dec55215e553ab19f45
+        run: |
+          mkdir -p "$RUNNER_TEMP/bitcompute-models"
+          curl --fail --location --retry 3 "$MODEL_URL" -o "$RUNNER_TEMP/bitcompute-models/smollm.gguf"
+          echo "$MODEL_SHA256  $RUNNER_TEMP/bitcompute-models/smollm.gguf" | sha256sum --check
+      - name: Run real GGUF inference test
+        env:
+          BITCOMPUTE_TEST_GGUF: ${{ runner.temp }}/bitcompute-models/smollm.gguf
+        run: python -m pytest -q tests/test_infer_llama.py
+
   test:
     name: Python ${{ matrix.python-version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -42,4 +72,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m pytest -q
+      - name: Install bubblewrap for sandbox tests
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Run test suite
+        run: python -m pytest -q --junitxml=pytest-results.xml
+      - name: Surface pytest failures
+        if: always()
+        run: python tools/report_pytest_junit.py pytest-results.xml

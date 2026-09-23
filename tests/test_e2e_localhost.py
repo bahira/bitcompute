@@ -7,19 +7,6 @@ import threading
 
 from bitcompute import node
 from bitcompute import torrent as bt
-from bitcompute.executor import register
-
-
-class _AsciiMockExecutor:
-    """Infer-friendly mock: returns an ASCII string so majority_vote can decode it."""
-
-    name = "mock_ascii"
-
-    def run(self, *, unit_uid, shard, params) -> bytes:
-        return f"{unit_uid}:{(shard or b'').decode('ascii', 'replace')}".encode()
-
-
-register(_AsciiMockExecutor)
 
 
 def test_e2e_train_three_nodes(tmp_path):
@@ -40,10 +27,20 @@ def test_e2e_train_three_nodes(tmp_path):
     # seed holds the magnet; workers fetch from it while it is alive (ports 7001-7004)
     man = node.load_manifest(jd)
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", 7001)
-    th = [threading.Thread(target=node.run_worker, args=(magnet, jd, 7002, 7001)),
-          threading.Thread(target=node.run_worker, args=(magnet, jd, 7003, 7001))]
+    th = [
+        threading.Thread(
+            target=node.run_worker, args=(magnet, jd, 7002, 7001),
+            kwargs={"insecure_legacy": True},
+        ),
+        threading.Thread(
+            target=node.run_worker, args=(magnet, jd, 7003, 7001),
+            kwargs={"insecure_legacy": True},
+        ),
+    ]
     [t.start() for t in th]
-    summary = node.seed_job(jd, port=7004, worker_ports=(7002, 7003))
+    summary = node.seed_job(
+        jd, port=7004, worker_ports=(7002, 7003), insecure_legacy=True
+    )
     sess.pause()
     [t.join(40) for t in th]
 
@@ -75,16 +72,26 @@ def test_e2e_infer_three_nodes(tmp_path):
             "units": [{"uid": "i0", "round": 0, "input_ref": "ping"},
                       {"uid": "i1", "round": 0, "input_ref": "ping"},
                       {"uid": "i2", "round": 0, "input_ref": "ping"}],
-            "executor": "mock_ascii", "params": {}, "redundancy": 1}
+            "executor": "mock", "params": {}, "redundancy": 1}
     with open(os.path.join(jd, "job.json"), "w", encoding="utf-8") as f:
         f.write(json.dumps(spec))
 
     man = node.load_manifest(jd)
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", 7011)
-    th = [threading.Thread(target=node.run_worker, args=(magnet, jd, 7012, 7011)),
-          threading.Thread(target=node.run_worker, args=(magnet, jd, 7013, 7011))]
+    th = [
+        threading.Thread(
+            target=node.run_worker, args=(magnet, jd, 7012, 7011),
+            kwargs={"insecure_legacy": True},
+        ),
+        threading.Thread(
+            target=node.run_worker, args=(magnet, jd, 7013, 7011),
+            kwargs={"insecure_legacy": True},
+        ),
+    ]
     [t.start() for t in th]
-    summary = node.seed_job(jd, port=7014, worker_ports=(7012, 7013))
+    summary = node.seed_job(
+        jd, port=7014, worker_ports=(7012, 7013), insecure_legacy=True
+    )
     sess.pause()
     [t.join(40) for t in th]
 

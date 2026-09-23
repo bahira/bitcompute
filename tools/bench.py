@@ -1,7 +1,6 @@
 """Fetch-latency bench: seed N-byte torrents, time bt.wait on the fetch side."""
 from __future__ import annotations
 
-import os
 import tempfile
 import time
 

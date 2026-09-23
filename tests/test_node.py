@@ -39,10 +39,15 @@ def _write_infer_job(jd):
 
 
 def _start_workers(magnet, jd, base):
-    return [threading.Thread(target=node.run_worker,
-                             args=(magnet, jd, base + i + 1, base),
-                             name=f"w{base + i + 1}")
-            for i in range(2)]
+    return [
+        threading.Thread(
+            target=node.run_worker,
+            args=(magnet, jd, base + i + 1, base),
+            kwargs={"insecure_legacy": True},
+            name=f"w{base + i + 1}",
+        )
+        for i in range(2)
+    ]
 
 
 def _join(threads):
@@ -57,7 +62,9 @@ def test_train_job_swarm_roundtrip(tmp_path):
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", 6901)
     th = _start_workers(magnet, jd, 6901)
     [t.start() for t in th]
-    summary = node.seed_job(jd, port=6910, worker_ports=(6902, 6903))
+    summary = node.seed_job(
+        jd, port=6910, worker_ports=(6902, 6903), insecure_legacy=True
+    )
     sess.pause()
     _join(th)
     assert abs(summary["w"] - 2.0) < 0.3
@@ -74,7 +81,9 @@ def test_train_job_two_rounds(tmp_path):
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", 6931)
     th = _start_workers(magnet, jd, 6931)
     [t.start() for t in th]
-    summary = node.seed_job(jd, port=6940, worker_ports=(6932, 6933))
+    summary = node.seed_job(
+        jd, port=6940, worker_ports=(6932, 6933), insecure_legacy=True
+    )
     sess.pause()
     _join(th)
     assert abs(summary["w"] - 2.0) < 0.3
@@ -92,7 +101,9 @@ def test_infer_job_majority_vote(tmp_path):
     _, sess, magnet = bt.seed_bytes(man.to_torrent_payload(), "manifest.json", 6951)
     th = _start_workers(magnet, jd, 6951)
     [t.start() for t in th]
-    summary = node.seed_job(jd, port=6960, worker_ports=(6952, 6953))
+    summary = node.seed_job(
+        jd, port=6960, worker_ports=(6952, 6953), insecure_legacy=True
+    )
     sess.pause()
     _join(th)
     assert summary["mode"] == "infer"
