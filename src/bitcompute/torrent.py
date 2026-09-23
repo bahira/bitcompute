@@ -136,17 +136,23 @@ def checksum(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def peer_count(handle, timeout: float = 10.0) -> int:
-    """Connected peers (seeders/farmers) seen by a torrent handle.
+def _peers_once(handle) -> int:
+    st = handle.status()
+    try:
+        d = st.dict()
+        v = d.get("peers") or d.get("num_peers") or d.get("num_seeds") or 0
+        return int(v)
+    except (AttributeError, TypeError):
+        return int(getattr(st, "num_peers", 0) or 0) + \
+            int(getattr(st, "num_seeds", 0) or 0)
 
-    2.x quirk: status().peers = total connected (via injected peer + DHT
-    bootstrap + PEX); poll until >=1.
-    """
+
+def peer_count(handle, timeout: float = 12.0) -> int:
+    """Connected peers/farmers seen by a torrent handle (polls until >=1)."""
     t0 = time.time()
     while time.time() - t0 < timeout:
-        st = handle.status()
-        n = int(getattr(st, "num_peers", 0) or 0)
+        n = _peers_once(handle)
         if n >= 1:
             return n
         time.sleep(0.2)
-    return int(getattr(handle.status(), "num_peers", 0) or 0)
+    return _peers_once(handle)
