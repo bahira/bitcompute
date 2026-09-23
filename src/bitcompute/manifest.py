@@ -23,6 +23,7 @@ class JobManifest:
     params: dict
     redundancy: int = 1
     shard_names: list[str] = field(default_factory=list)
+    schema: int = 1
     job_id: str = field(default="", compare=False)
 
     @classmethod
@@ -45,6 +46,7 @@ class JobManifest:
 
     def _hash(self) -> str:
         payload = {
+            "schema": self.schema,
             "name": self.name, "mode": self.mode,
             "shards": [hashlib.sha256(s).hexdigest() for s in self.shards],
             "shard_names": self.shard_names,
@@ -59,6 +61,7 @@ class JobManifest:
 
     def to_torrent_payload(self) -> bytes:
         return json.dumps({
+            "schema": self.schema,
             "job_id": self.job_id, "name": self.name, "mode": self.mode,
             "units": [asdict(u) for u in self.units],
             "executor": self.executor, "params": self.params,

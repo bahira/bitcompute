@@ -9,7 +9,7 @@ def test_torrent_roundtrip_small():
     assert len(ih) == 40
     d2 = tempfile.mkdtemp()
     h2, sess2 = bt.fetch(ih, d2, 6882, seed_port=6881)
-    assert bt.wait(h2, timeout=30) is True
+    assert bt.wait(h2, timeout=30, sess=sess2) is True
     data = b""
     for _ in range(20):
         data = bt.read_result(h2)
@@ -27,7 +27,7 @@ def test_torrent_roundtrip_multpiece():
     h, sess, ih = bt.seed_bytes(payload, "big.bin", 6883)
     d2 = tempfile.mkdtemp()
     h2, sess2 = bt.fetch(ih, d2, 6884, seed_port=6883)
-    assert bt.wait(h2, timeout=30) is True
+    assert bt.wait(h2, timeout=30, sess=sess2) is True
     data = b""
     for _ in range(20):
         data = bt.read_result(h2)
@@ -52,7 +52,8 @@ def test_dht_auto_discovery():
     import tempfile
     h, sess, ih = bt.seed_bytes(b"q" * 900, "dd.json", 6886)
     h2, sess2 = bt.fetch(ih, tempfile.mkdtemp(), 6887, seed_port=6886)
-    assert bt.wait(h2, timeout=20) is True
-    assert bt.peer_count(h) >= 1 or bt.peer_count(h2) >= 1
+    assert bt.wait(h2, timeout=20, sess=sess2) is True
+    n = max(bt.peer_count(h2, sess=sess2), bt.peer_count(h, sess=sess))
+    assert n >= 1  # farmer/dht nodes visible on at least one side
     sess.pause()
     sess2.pause()

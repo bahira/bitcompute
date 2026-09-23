@@ -85,7 +85,10 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
            resume_path: str = "", session: lt.session | None = None):
     """Join a swarm via direct peer injection (+DHT bootstrap). Returns (handle, session)."""
     sess = session if session is not None else lt.session(_settings(port, bootstrap))
+    has_resume = bool(resume_path) and os.path.isfile(resume_path)
     for path in (os.path.join(dest_dir, name),):
+        if has_resume and os.path.isfile(path):
+            continue  # cache+file pair already consistent; keep them synced
         try:
             os.remove(path)
         except OSError:
@@ -103,10 +106,16 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
     return sess.add_torrent(at), sess if session is None else sess
 
 
-def wait(handle, timeout: float = 30.0) -> bool:
+def wait(handle, timeout: float = 30.0, sess=None) -> bool:
     """Poll until metadata + all pieces are in AND the file is fully flushed."""
     t0 = time.time()
     while time.time() - t0 < timeout:
+        if sess is not None:
+            try:
+                sess.post_torrent_updates()
+                sess.wait_for_alert(50)
+            except Exception:  # noqa: BLE001
+                pass
         st = handle.status()
         if st.has_metadata and st.progress >= 1.0:
             tf = handle.torrent_file()
@@ -147,12 +156,27 @@ def _peers_once(handle) -> int:
             int(getattr(st, "num_seeds", 0) or 0)
 
 
-def peer_count(handle, timeout: float = 12.0) -> int:
-    """Connected peers/farmers seen by a torrent handle (polls until >=1)."""
+def peer_count(handle, timeout: float = 12.0, sess=None) -> int:
+    """Connected peers/farmers: torrent counter, falling back to DHT nodes.
+
+    2.x: torrent_status caches counters until alerts are drained; poll with
+    post_torrent_updates. The session dht_nodes proves DHT discoverability.
+    """
     t0 = time.time()
     while time.time() - t0 < timeout:
+        if sess is not None:
+            try:
+                sess.post_torrent_updates()
+                sess.wait_for_alert(50)
+            except Exception:  # noqa: BLE001
+                pass
         n = _peers_once(handle)
         if n >= 1:
             return n
+        if sess is not None:
+            st = sess.status()
+            d = int(getattr(st, "dht_nodes", 0) or 0)
+            if d >= 1:
+                return d
         time.sleep(0.2)
     return _peers_once(handle)

@@ -31,6 +31,7 @@ def load_manifest(job_dir: str) -> JobManifest:
         executor=spec["executor"], params=spec["params"],
         redundancy=spec.get("redundancy", 1),
         shard_names=spec.get("shard_files", []),
+        schema=spec.get("schema", 1),
     )
 
 
@@ -42,8 +43,15 @@ def run_worker(magnet: str, job_dir: str, port: int, seed_port: int) -> dict:
     resume = os.path.join(job_dir, f"resume_{port}.dat")
     handle, sess = bt.fetch(magnet, dest, port, seed_port=seed_port,
                             bootstrap=bootstrap, resume_path=resume)
-    if not bt.wait(handle, timeout=120):
-        raise RuntimeError(f"manifest not fetched in time (port {port})")
+    if not bt.wait(handle, timeout=120, sess=sess):
+        # resume+removed-file combo needs a recheck to rewrite from piece cache
+        try:
+            handle.force_recheck()
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(0.5)
+        if not bt.wait(handle, timeout=120, sess=sess):
+            raise RuntimeError(f"manifest not fetched in time (port {port})")
     bt.save_resume(handle, resume)
     payload = json.loads(bt.read_result(handle).decode())
     shards = dict(zip(payload["shard_names"],
@@ -99,7 +107,7 @@ def _verify_result_torrents(job_dir: str, magnet: str, results: list[dict],
         sess = bt.lt.session(bt._settings(seed_port + 1 + k))
         h2, _ = bt.fetch(hex_, dest, wp, seed_port=wp,
                          name=f"result_{wp}.json", session=sess)
-        ok = bt.wait(h2, timeout=25)
+        ok = bt.wait(h2, timeout=25, sess=sess)
         data = bt.read_result(h2) if ok else b""
         sess.pause()
         verified[wp] = ok and data == blob and bt.checksum(data) == bt.checksum(blob)
