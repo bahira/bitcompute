@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
 
             def ready(event: dict) -> None:
                 print(
-                    "bitcompute: ready " + json.dumps(event, ensure_ascii=False),
+                    "bitcompute: ready " + json.dumps(event, ensure_ascii=True),
                     file=sys.stderr, flush=True,
                 )
 
@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
                 encryption_key=args.encryption_key if not args.insecure_legacy else None,
                 insecure_legacy=args.insecure_legacy,
             )
-            print(json.dumps(info, ensure_ascii=False))
+            print(json.dumps(info, ensure_ascii=True))
         elif args.cmd == "worker":
             secure_args = (args.identity_key, args.trusted_seed_key, args.encryption_key)
             if args.insecure_legacy:
@@ -177,9 +177,9 @@ def main(argv: list[str] | None = None) -> int:
                 generated["encryption_key"] = str(
                     security.generate_encryption_key(args.encryption_key)
                 )
-            print(json.dumps(generated, ensure_ascii=False))
+            print(json.dumps(generated, ensure_ascii=True))
         else:
-            print(json.dumps(node.status(args.job_dir), ensure_ascii=False))
+            print(json.dumps(node.status(args.job_dir), ensure_ascii=True))
     except (OSError, RuntimeError, TimeoutError, ValueError, KeyError) as exc:
         _print_error(exc)
         return 1

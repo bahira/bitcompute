@@ -100,6 +100,15 @@ def test_cli_error_output_survives_legacy_windows_encoding(monkeypatch):
     assert stream.value == "bitcompute: error: bad replacement character: \\ufffd\n"
 
 
+def test_cli_json_output_escapes_unencodable_unicode(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli.node, "seed_job", lambda *args, **kwargs: {"value": "\ufffd"})
+    assert cli.main([
+        "seed", str(tmp_path), "--port", "7101", "--workers", "7102", "--insecure-legacy",
+    ]) == 0
+    output = capsys.readouterr().out
+    assert r"\ufffd" in output
+    assert "\ufffd" not in output
+
 def test_python_node_api_requires_explicit_legacy_opt_in(tmp_path):
     with pytest.raises(ValueError, match="insecure_legacy=True"):
         node.seed_job(str(tmp_path / "seed"), port=7101, worker_ports=(7102,))
