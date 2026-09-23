@@ -83,6 +83,7 @@ def load_manifest(job_dir: str) -> JobManifest:
             name=spec["name"], mode=spec["mode"], shards=shards, units=units,
             executor=spec["executor"], params=spec.get("params", {}),
             redundancy=spec.get("redundancy", 1), shard_names=names,
+            schema=spec.get("schema", SCHEMA_VERSION),
         )
     except (OSError, KeyError, TypeError, json.JSONDecodeError, ValueError) as exc:
         raise ValueError(f"invalid job in {job_path}: {exc}") from exc
@@ -144,8 +145,18 @@ def run_worker(
         bootstrap=bootstrap, resume_path=str(resume),
     )
     try:
-        if not bt.wait(handle, timeout=fetch_timeout):
-            raise TimeoutError(f"manifest not fetched within {fetch_timeout:g}s (port {port})")
+        if not bt.wait(handle, timeout=fetch_timeout, sess=sess):
+            # A resume cache can outlive its downloaded file. Force a recheck
+            # once so libtorrent rewrites it from the available pieces.
+            try:
+                handle.force_recheck()
+            except Exception:  # noqa: BLE001 - optional libtorrent operation
+                pass
+            time.sleep(0.5)
+            if not bt.wait(handle, timeout=fetch_timeout, sess=sess):
+                raise TimeoutError(
+                    f"manifest not fetched within {fetch_timeout:g}s (port {port})"
+                )
         bt.save_resume(handle, str(resume))
         manifest = JobManifest.from_torrent_payload(bt.read_result(handle))
         shards = dict(zip(manifest.shard_names, manifest.shards))
@@ -361,7 +372,7 @@ def _verify_result_torrents(
                     seed_port=worker_port, name=f"result_{worker_port}.json",
                     session=session,
                 )
-                ok = bt.wait(handle, timeout=timeout)
+                ok = bt.wait(handle, timeout=timeout, sess=session)
                 downloaded = bt.read_result(handle) if ok else b""
                 verified[worker_port] = ok and downloaded == blob
         finally:

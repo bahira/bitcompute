@@ -112,6 +112,8 @@ def _style(s):
     s.map("TButton", background=[("active", "#3ef0b4"), ("pressed", "#00c78d")])
     s.configure("TScrollbAr", background=_CARD, troughcolor=_BG,
                 lightcolor=_ACC)
+    s.configure("Horizontal.TProgressbar", background=_CARD, troughcolor="#1c242b",
+                lightcolor=_ACC, borderwidth=0)
 
 
 def _ui():
@@ -212,6 +214,31 @@ def _ui():
     std = field(f3, 0, "job dir", "job")
     ttk.Button(f3, text="Show summary", command=lambda: job(
         lambda: run_status(std.get()))).grid(row=1, column=0, sticky="w", pady=10)
+    bar = ttk.Progressbar(f3, orient="horizontal", length=220, maximum=8)
+    bar.grid(row=2, column=0, columnspan=2, sticky="we", pady=(6, 0))
+    lbl = ttk.Label(f3, text="", style="Mut.TLabel")
+    lbl.grid(row=3, column=0, columnspan=2, sticky="w")
+
+    seen = {"n": 0}
+
+    def poll():
+        s = run_status(std.get())
+        n = len([f for f in os.listdir(std.get())
+                 if f.startswith("result_") and f.endswith(".json")]) \
+            if os.path.isdir(std.get()) else 0
+        bar["value"] = min(n, 8)
+        done = "workers" in s
+        lbl.config(text=f"results {n} · "
+                       f"{'complete' if done else s.get('state', 'in_progress')}")
+        if done and seen["n"] != n:
+            seen["n"] = n
+            log(json.dumps(s, indent=1))
+        if not done or seen["n"] == 0:
+            root.after(2000, poll)
+        else:
+            root.after(2000, poll)
+
+    root.after(600, poll)
 
     root.mainloop()
     return 0

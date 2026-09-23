@@ -1,10 +1,11 @@
 {
- "generated": 1790121155,
+ "generated": 1790141249,
+ "schema_version": 1,
  "jobs": [
   {
    "name": "toy-train",
    "mode": "train",
-   "magnet": "f2828d046efd63c3bdb48c21363cf5c66a160357",
+   "magnet": "b75c1458371ee8a181d68eabf0f7cf0b4ecf9c2b",
    "seed_port": 7401,
    "workers": 2,
    "result": {
@@ -29,7 +30,7 @@
   {
    "name": "slm-infer",
    "mode": "infer",
-   "magnet": "b347311410528d67df0c8125e6bec8267295c43a",
+   "magnet": "14041af8392db3c7e26a63512164ef0c736ae247",
    "seed_port": 7411,
    "workers": 1,
    "result": {

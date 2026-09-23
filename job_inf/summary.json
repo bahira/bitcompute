@@ -1,1 +1,1 @@
-{"job_id": "9435bc9766862b3de7b0a49c003f8f6c4c029180aab838854c59ea582d2a567d", "mode": "infer", "units": {"i0": "2, 2+2=4"}, "workers": 1, "torrent_verified": {"7413": true}, "tokens": {"7413": {"bytes": 85, "pieces": 1}}, "magnet": "b347311410528d67df0c8125e6bec8267295c43a"}
+{"job_id": "ae3a80836688418efa09fa58854657def3b6dea597290f997764e201ea69cb26", "mode": "infer", "units": {"i0": "2, 2+2=4"}, "workers": 1, "torrent_verified": {"7413": true}, "tokens": {"7413": {"bytes": 85, "pieces": 1}}, "magnet": "14041af8392db3c7e26a63512164ef0c736ae247"}

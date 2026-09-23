@@ -43,6 +43,7 @@ class JobManifest:
     params: dict[str, Any]
     redundancy: int = 1
     shard_names: list[str] = field(default_factory=list)
+    schema: int = SCHEMA_VERSION
     job_id: str = field(default="", compare=False)
 
     @classmethod
@@ -61,7 +62,8 @@ class JobManifest:
             payload = json.loads(raw.decode("utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("manifest root must be an object")
-            if payload.get("schema_version", SCHEMA_VERSION) != SCHEMA_VERSION:
+            schema = payload.get("schema", payload.get("schema_version", SCHEMA_VERSION))
+            if schema != SCHEMA_VERSION:
                 raise ValueError("unsupported manifest schema version")
             shards = [bytes.fromhex(item) for item in payload["shards"]]
             units = [WorkUnit(**item) for item in payload["units"]]
@@ -69,7 +71,7 @@ class JobManifest:
                 name=payload["name"], mode=payload["mode"], shards=shards,
                 units=units, executor=payload["executor"], params=payload["params"],
                 redundancy=payload.get("redundancy", 1),
-                shard_names=payload.get("shard_names", []),
+                shard_names=payload.get("shard_names", []), schema=schema,
             )
         except (KeyError, TypeError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             raise ValueError(f"invalid manifest payload: {exc}") from exc
@@ -78,6 +80,8 @@ class JobManifest:
         return manifest
 
     def _validate(self) -> None:
+        if self.schema != SCHEMA_VERSION:
+            raise ValueError(f"unsupported manifest schema version {self.schema!r}")
         if not isinstance(self.name, str) or not self.name.strip() or len(self.name) > 200:
             raise ValueError("name must contain 1 to 200 characters")
         if self.mode not in ("train", "infer"):
@@ -128,7 +132,7 @@ class JobManifest:
 
     def _identity(self) -> dict[str, Any]:
         return {
-            "schema_version": SCHEMA_VERSION,
+            "schema": self.schema,
             "name": self.name,
             "mode": self.mode,
             "shards": [hashlib.sha256(s).hexdigest() for s in self.shards],
@@ -147,7 +151,7 @@ class JobManifest:
 
     def to_torrent_payload(self) -> bytes:
         payload = {
-            "schema_version": SCHEMA_VERSION,
+            "schema": self.schema,
             "job_id": self.job_id,
             "name": self.name,
             "mode": self.mode,
