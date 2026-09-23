@@ -74,6 +74,16 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_error(exc: BaseException) -> None:
+    message = f"bitcompute: error: {exc}\n"
+    try:
+        sys.stderr.write(message)
+    except UnicodeEncodeError:
+        encoding = sys.stderr.encoding or "utf-8"
+        safe_message = message.encode(encoding, errors="backslashreplace").decode(encoding)
+        sys.stderr.write(safe_message)
+
+
 def _parse_worker_key_specs(specs: list[str]) -> dict[int, str]:
     result: dict[int, str] = {}
     for spec in specs:
@@ -171,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(json.dumps(node.status(args.job_dir), ensure_ascii=False))
     except (OSError, RuntimeError, TimeoutError, ValueError, KeyError) as exc:
-        print(f"bitcompute: error: {exc}", file=sys.stderr)
+        _print_error(exc)
         return 1
     return 0
 

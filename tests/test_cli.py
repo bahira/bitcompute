@@ -83,6 +83,23 @@ def test_cli_requires_secure_keys_or_explicit_legacy_mode(tmp_path, capsys):
     assert "secure worker mode needs" in capsys.readouterr().err
 
 
+def test_cli_error_output_survives_legacy_windows_encoding(monkeypatch):
+    class Cp1252Stream:
+        encoding = "cp1252"
+
+        def __init__(self):
+            self.value = ""
+
+        def write(self, text):
+            text.encode(self.encoding)
+            self.value += text
+
+    stream = Cp1252Stream()
+    monkeypatch.setattr(cli.sys, "stderr", stream)
+    cli._print_error(ValueError("bad replacement character: \ufffd"))
+    assert stream.value == "bitcompute: error: bad replacement character: \\ufffd\n"
+
+
 def test_python_node_api_requires_explicit_legacy_opt_in(tmp_path):
     with pytest.raises(ValueError, match="insecure_legacy=True"):
         node.seed_job(str(tmp_path / "seed"), port=7101, worker_ports=(7102,))
