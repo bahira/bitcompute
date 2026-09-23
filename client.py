@@ -17,26 +17,44 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src
 
 from bitcompute import node  # noqa: E402
 
-_HF_MODELS = {
-    "q4_k_m (default)": "Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-    "q4_0": "Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q4_0.gguf",
-    "q5_k_m": "Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q5_k_m.gguf",
-    "q8_0": "Qwen/Qwen2.5-0.5B-Instruct-GGUF/qwen2.5-0.5b-instruct-q8_0.gguf",
-}
+
+def _parse_worker_key_specs(value):
+    parsed = {}
+    for item in value.split():
+        port_text, separator, path = item.partition("=")
+        if not separator or not port_text or not path:
+            raise ValueError("worker public keys must use PORT=PATH format")
+        port = int(port_text)
+        if port in parsed:
+            raise ValueError(f"duplicate worker key for port {port}")
+        parsed[port] = path
+    return parsed
 
 
-def run_seed(job_dir, port, workers, on_ready=None):
+def run_seed(
+    job_dir, port, workers, on_ready=None,
+    identity_key=None, worker_public_keys=None, encryption_key=None,
+):
+    if not identity_key or not worker_public_keys or not encryption_key:
+        raise ValueError("secure seed mode requires all three key inputs")
     return node.seed_job(
-        job_dir, port=port, worker_ports=tuple(workers), on_ready=on_ready
+        job_dir, port=port, worker_ports=tuple(workers), on_ready=on_ready,
+        identity_key=identity_key, worker_public_keys=worker_public_keys,
+        encryption_key=encryption_key,
     )
 
 
 def run_worker_job(
-    magnet, job_dir, port, seed_port, seed_host="127.0.0.1", announce_port=None
+    magnet, job_dir, port, seed_port, seed_host="127.0.0.1", announce_port=None,
+    identity_key=None, trusted_seed_key=None, encryption_key=None,
 ):
+    if not identity_key or not trusted_seed_key or not encryption_key:
+        raise ValueError("secure worker mode requires all three key inputs")
     return node.run_worker(
         magnet, job_dir, port, seed_port,
         seed_host=seed_host, announce_port=announce_port,
+        identity_key=identity_key, trusted_seed_key=trusted_seed_key,
+        encryption_key=encryption_key,
     )
 
 
@@ -45,35 +63,9 @@ def run_status(job_dir):
 
 
 def _console(argv):
-    p = __import__("argparse").ArgumentParser(prog="bitcompute")
-    sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("seed")
-    s.add_argument("job_dir")
-    s.add_argument("--port", type=int, default=7401)
-    s.add_argument("--workers", type=int, nargs="+", default=[7402, 7403])
-    w = sub.add_parser("worker")
-    w.add_argument("--magnet", required=True)
-    w.add_argument("--job-dir", required=True)
-    w.add_argument("--port", type=int, default=7402)
-    w.add_argument("--seed-host", default="127.0.0.1")
-    w.add_argument("--seed-port", type=int, default=7401)
-    w.add_argument("--announce-port", type=int)
-    st = sub.add_parser("status")
-    st.add_argument("job_dir")
-    a = p.parse_args(argv)
-    if a.cmd == "seed":
-        def ready(event):
-            print("bitcompute: ready " + json.dumps(event), file=sys.stderr, flush=True)
+    from bitcompute.cli import main
 
-        print(json.dumps(run_seed(a.job_dir, a.port, a.workers, ready)))
-    elif a.cmd == "worker":
-        print(json.dumps(run_worker_job(
-            a.magnet, a.job_dir, a.port, a.seed_port,
-            a.seed_host, a.announce_port,
-        )))
-    else:
-        print(json.dumps(run_status(a.job_dir)))
-    return 0
+    return main(argv)
 
 
 # ---------------------------------------------------------------- UI
@@ -128,8 +120,7 @@ def _ui():
     top = ttk.Frame(root)
     top.pack(fill="x", padx=14, pady=(12, 2))
     ttk.Label(top, text="bitcompute", style="H.TLabel").pack(side="left")
-    ttk.Label(top, text="swarm compute · 127.0.0.1", style="Mut.TLabel")\
-        .pack(side="right")
+    ttk.Label(top, text="secure swarm client", style="Mut.TLabel").pack(side="right")
 
     nb = ttk.Notebook(root)
     nb.pack(fill="both", expand=True, padx=14, pady=6)
@@ -148,8 +139,8 @@ def _ui():
             try:
                 res = fn()
                 root.after(0, lambda: log(json.dumps(res, indent=1)))
-            except Exception as e:  # noqa: BLE001
-                root.after(0, lambda: log(f"error: {e}"))
+            except Exception as exc:  # noqa: BLE001
+                root.after(0, lambda error=exc: log(f"error: {error}"))
         threading.Thread(target=work, daemon=True).start()
 
     def field(parent, row, label, default="", width=34):
@@ -167,14 +158,20 @@ def _ui():
     sd = field(f1, 0, "job dir", "job")
     sp = field(f1, 1, "seed port", "7401", 10)
     sw = field(f1, 2, "workers", "7402 7403", 20)
-    ttk.Button(f1, text="Run seed", command=lambda: job(
+    si = field(f1, 3, "seed private key", width=46)
+    se = field(f1, 4, "shared AES key", width=46)
+    sk = field(f1, 5, "worker keys PORT=PUBLIC_KEY", width=60)
+    ttk.Button(f1, text="Run secure seed", command=lambda: job(
         lambda: run_seed(
             sd.get(), int(sp.get()), [int(x) for x in sw.get().split()],
             lambda event: root.after(
                 0, lambda: log("ready: " + json.dumps(event))
             ),
+            identity_key=si.get(),
+            worker_public_keys=_parse_worker_key_specs(sk.get()),
+            encryption_key=se.get(),
         )))\
-        .grid(row=3, column=0, sticky="w", pady=10)
+        .grid(row=6, column=0, sticky="w", pady=10)
 
     # Worker tab
     f2 = ttk.Frame(nb, style="Card.TFrame")
@@ -185,28 +182,23 @@ def _ui():
     wh = field(f2, 3, "seed host", "127.0.0.1", 24)
     ws = field(f2, 4, "seed port", "7401", 10)
     wa = field(f2, 5, "announce port", "8401", 10)
-    ttk.Label(f2, text="hf model", style="Mut.TLabel")\
-        .grid(row=6, column=0, sticky="w", padx=(0, 10))
-    cb = ttk.Combobox(f2, values=list(_HF_MODELS), width=54, state="readonly")
-    cb.current(0)
-    cb.grid(row=6, column=1, sticky="we")
+    wi = field(f2, 6, "worker private key", width=46)
+    wk = field(f2, 7, "trusted seed public key", width=46)
+    we = field(f2, 8, "shared AES key", width=46)
+    ttk.Label(
+        f2, text="Executor and model are pinned in the signed job manifest.",
+        style="Mut.TLabel",
+    ).grid(row=9, column=1, sticky="w", pady=4)
 
     def run_w():
-        model = _HF_MODELS[cb.get()]
-        jj = os.path.join(wd.get(), "job.json")
-        if os.path.isfile(jj):
-            with open(jj, encoding="utf-8") as f:
-                spec = json.loads(f.read())
-            spec.setdefault("params", {})["model"] = model
-            with open(jj, "w", encoding="utf-8") as f:
-                f.write(json.dumps(spec))
         return run_worker_job(
             wm.get(), wd.get(), int(wp.get()), int(ws.get()),
             wh.get(), int(wa.get()),
+            identity_key=wi.get(), trusted_seed_key=wk.get(), encryption_key=we.get(),
         )
 
-    ttk.Button(f2, text="Run worker", command=lambda: job(run_w))\
-        .grid(row=7, column=0, sticky="w", pady=10)
+    ttk.Button(f2, text="Run secure worker", command=lambda: job(run_w))\
+        .grid(row=10, column=0, sticky="w", pady=10)
 
     # Status tab
     f3 = ttk.Frame(nb, style="Card.TFrame")

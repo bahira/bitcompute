@@ -26,7 +26,11 @@ def test_remote_worker_returns_result_without_shared_job_dir(tmp_path):
         worker = threading.Thread(
             target=node.run_worker,
             args=(event["magnet"], str(worker_dir), 7022, 7021),
-            kwargs={"announce_port": event["announce_port"], "result_grace": 10},
+            kwargs={
+                "announce_port": event["announce_port"],
+                "result_grace": 10,
+                "insecure_legacy": True,
+            },
         )
         worker.start()
         workers.append(worker)
@@ -34,7 +38,7 @@ def test_remote_worker_returns_result_without_shared_job_dir(tmp_path):
     summary = node.seed_job(
         str(seed_dir), port=7021, worker_ports=(7022,),
         announce_port=8021, collect_timeout=45, verify_timeout=20,
-        on_ready=ready,
+        on_ready=ready, insecure_legacy=True,
     )
     for worker in workers:
         worker.join(30)

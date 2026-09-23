@@ -26,10 +26,15 @@ def _write_train_job(jd, steps=500):
 
 
 def _workers(magnet, jd, base, n):
-    return [threading.Thread(target=node.run_worker,
-                             args=(magnet, jd, base + i + 1, base),
-                             name=f"w{base + i + 1}")
-            for i in range(n)]
+    return [
+        threading.Thread(
+            target=node.run_worker,
+            args=(magnet, jd, base + i + 1, base),
+            kwargs={"insecure_legacy": True},
+            name=f"w{base + i + 1}",
+        )
+        for i in range(n)
+    ]
 
 
 def _join(threads):
@@ -45,7 +50,9 @@ def test_resume_roundtrip(tmp_path):
     th = _workers(magnet, jd, 7440, 2)
     [t.start() for t in th]
     time.sleep(1)
-    node.seed_job(jd, port=7448, worker_ports=(7441, 7442))
+    node.seed_job(
+        jd, port=7448, worker_ports=(7441, 7442), insecure_legacy=True
+    )
     _join(th)
     for wp in (7441, 7442):
         rp = os.path.join(jd, f"resume_{wp}.dat")
@@ -53,7 +60,7 @@ def test_resume_roundtrip(tmp_path):
         assert os.path.getsize(rp) > 0
     # second run: same worker port + seed still alive → resume loads, completes
     for wp in (7441, 7442):
-        body = node.run_worker(magnet, jd, wp, 7440)
+        body = node.run_worker(magnet, jd, wp, 7440, insecure_legacy=True)
         assert body["units"]
         assert set(body["units"]) == {"r0-s0", "r0-s1"}
     sess.pause()
@@ -67,7 +74,9 @@ def test_redundancy_three_workers(tmp_path):
     th = _workers(magnet, jd, 7450, 3)
     [t.start() for t in th]
     time.sleep(1)
-    summary = node.seed_job(jd, port=7458, worker_ports=(7451, 7452, 7453))
+    summary = node.seed_job(
+        jd, port=7458, worker_ports=(7451, 7452, 7453), insecure_legacy=True
+    )
     sess.pause()
     _join(th)
     assert summary["workers"] >= 2  # cold-start tolerance; median stable at k>=2
@@ -89,7 +98,9 @@ def test_byzantine_excluded(tmp_path):
             "units": {"r0-s0": liar, "r0-s1": liar}}
     with open(os.path.join(jd, "result_7454.json"), "w", encoding="utf-8") as f:
         f.write(json.dumps(fake))
-    summary = node.seed_job(jd, port=7458, worker_ports=(7451, 7452, 7453))
+    summary = node.seed_job(
+        jd, port=7458, worker_ports=(7451, 7452, 7453), insecure_legacy=True
+    )
     sess.pause()
     _join(th)
     # byzantine (7454) not in worker_ports → excluded; median tolerates cold-start 2/3
