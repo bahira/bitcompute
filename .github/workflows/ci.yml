@@ -75,4 +75,8 @@ jobs:
       - name: Install bubblewrap for sandbox tests
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
-      - run: python -m pytest -q
+      - name: Run test suite
+        run: python -m pytest -q --junitxml=pytest-results.xml
+      - name: Surface pytest failures
+        if: always()
+        run: python tools/report_pytest_junit.py pytest-results.xml
