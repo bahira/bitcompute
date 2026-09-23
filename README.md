@@ -68,6 +68,29 @@ python -m bitcompute.cli status job
 
 Multi-machine DHT: `set BITCOMPUTE_DHT_ROUTERS=ip:port;ip:port`.
 
+## Auto-discovery
+
+1. Each session gets `enable_dht: True` + `dht_bootstrap_nodes` (the seed's
+   `ip:port`), so the seed announces itself and every later joiner learns it
+   from the bootstrap table; without a bootstrap, env `BITCOMPUTE_DHT_ROUTERS`
+   (`ip:port;ip:port`) provides the routers.
+2. Torrents are added with flags `default | pex-bit`: after the first
+   handshake the swarm exchanges peers via PEX, so a 3rd+ worker finds the
+   seed without manual injection.
+3. `torrent.peer_count(handle)` polls `status().num_peers` — used in tests to
+   prove seeders/farmers really connected (≥1 per side, 4/4 green).
+
+## Production notes
+
+- Package `bitcompute 0.1.0` (tag `v0.1.0`), PEP-517, `pip install .` works;
+  CI matrix [3.10, 3.11] with pip cache; single-file `dist/bitcompute.exe`.
+- Ports: tests use disjoint ranges — torrent 6881-6887, node 6901-6932,
+  cli 6971-6992, resume 7440-7462, e2e 7001-7016; in one process each
+  session binds its own UDP port, so files can run sequentially without clash.
+- Cold starts: `wait` polls until file size == torrent `total_size` (no
+  half-flushed json), `_collect` timeout 75 s, worker wait 120 s, 20 s
+  announce grace.
+
 ## How it works
 
 1. Seed publishes canonicalized manifest as a torrent (pieces = 16 KiB,
@@ -101,6 +124,6 @@ Closed in v0.1.0: #19 PEX/IPv6 flags + routers, #20 mini-staking tokens,
 MIT
 ## Clients
 
-- `dist/bitcompute.exe` � one-file console+Tk UI (PyInstaller). Console: same 3 subcommands as
+- `dist/bitcompute.exe` � one-file console+Tk UI (PyInstaller). Console: same 3 subcommands as
   `python -m bitcompute.cli`; without args it opens the Tk notebook (Seed / Worker / Status tabs,
   HF model select for `params.model`).

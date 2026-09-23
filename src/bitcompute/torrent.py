@@ -30,7 +30,8 @@ def _settings(port: int, bootstrap: str = "") -> dict:
     return s
 
 
-TORRENT_FLAGS = int(lt.torrent_flags.default_flags)
+TORRENT_FLAGS = int(lt.torrent_flags.default_flags) | 2  # seed side: +pex bit
+FETCH_FLAGS = int(lt.torrent_flags.default_flags)  # fetch side: pex off (direct peers win, 2.x quirk)
 
 
 def make_torrent_info(payload: bytes, name: str) -> tuple[lt.torrent_info, str]:
@@ -90,7 +91,7 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
         except OSError:
             pass
     at = lt.add_torrent_params()
-    at.flags = TORRENT_FLAGS
+    at.flags = FETCH_FLAGS
     at.save_path = dest_dir
     at.info_hashes = ih_from_hex(info_hash) if isinstance(info_hash, str) else info_hash
     at.peers = [(seed_host, seed_port)]
@@ -103,13 +104,17 @@ def fetch(info_hash: lt.info_hash_t | str, dest_dir: str, port: int,
 
 
 def wait(handle, timeout: float = 30.0) -> bool:
-    """Poll until metadata + all pieces are in. Returns True on completion."""
+    """Poll until metadata + all pieces are in AND the file is fully flushed."""
     t0 = time.time()
     while time.time() - t0 < timeout:
         st = handle.status()
         if st.has_metadata and st.progress >= 1.0:
-            return True
-        time.sleep(0.3)
+            tf = handle.torrent_file()
+            if tf is not None:
+                p = os.path.join(st.save_path, tf.name())
+                if os.path.isfile(p) and os.path.getsize(p) == tf.total_size():
+                    return True
+        time.sleep(0.1)
     return False
 
 
@@ -129,3 +134,19 @@ def read_result(handle) -> bytes:
 
 def checksum(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def peer_count(handle, timeout: float = 10.0) -> int:
+    """Connected peers (seeders/farmers) seen by a torrent handle.
+
+    2.x quirk: status().peers = total connected (via injected peer + DHT
+    bootstrap + PEX); poll until >=1.
+    """
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        st = handle.status()
+        n = int(getattr(st, "num_peers", 0) or 0)
+        if n >= 1:
+            return n
+        time.sleep(0.2)
+    return int(getattr(handle.status(), "num_peers", 0) or 0)

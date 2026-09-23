@@ -42,7 +42,7 @@ def run_worker(magnet: str, job_dir: str, port: int, seed_port: int) -> dict:
     resume = os.path.join(job_dir, f"resume_{port}.dat")
     handle, sess = bt.fetch(magnet, dest, port, seed_port=seed_port,
                             bootstrap=bootstrap, resume_path=resume)
-    if not bt.wait(handle, timeout=90):
+    if not bt.wait(handle, timeout=120):
         raise RuntimeError(f"manifest not fetched in time (port {port})")
     bt.save_resume(handle, resume)
     payload = json.loads(bt.read_result(handle).decode())
@@ -71,7 +71,7 @@ def run_worker(magnet: str, job_dir: str, port: int, seed_port: int) -> dict:
     return body
 
 
-def _collect(job_dir: str, worker_ports: tuple[int, ...], timeout: float = 45.0) -> list[dict]:
+def _collect(job_dir: str, worker_ports: tuple[int, ...], timeout: float = 75.0) -> list[dict]:
     t0 = time.time()
     got: dict[int, dict] = {}
     while time.time() - t0 < timeout and len(got) < len(worker_ports):
